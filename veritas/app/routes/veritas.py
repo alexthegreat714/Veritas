@@ -4,7 +4,7 @@ Veritas API Routes
 This module defines the API endpoints for the Veritas truth auditing service.
 All endpoints return JSON responses.
 
-Phase 2: Integrated with logic modules for actual analysis.
+Phase 3: Integrated with VeritasBrain reasoning engine.
 """
 
 import logging
@@ -18,9 +18,13 @@ from app.logic.auditor import audit_text
 from app.logic.bias_detector import detect_bias
 from app.logic.chain_validator import validate_chain
 from app.logic.source_checker import check_sources
+from app.logic.brain import VeritasBrain, get_brain
 
 
 logger = logging.getLogger(__name__)
+
+# Initialize the VeritasBrain instance at module scope
+brain = get_brain()
 
 router = APIRouter(prefix="", tags=["veritas"])
 
@@ -67,36 +71,44 @@ class CheckSourcesRequest(BaseModel):
 @router.post("/run_task", response_class=JSONResponse)
 async def run_task(request: TaskRequest) -> Dict[str, Any]:
     """
-    Execute a specified task.
+    Execute a specified task through the VeritasBrain reasoning engine.
+
+    The brain automatically classifies tasks and runs appropriate tools.
+    For explicit task_type requests, the payload is enriched accordingly.
 
     Supported task types:
-    - audit_text: Analyze text for logical issues
-    - detect_bias: Detect bias in text
+    - audit_text: Analyze text for logical issues and bias
     - validate_chain: Validate reasoning chain
     - check_sources: Check source credibility
+    - composite_audit: Run multiple analyses
+
+    Returns structured results with summary and detailed findings.
     """
     logger.info(f"Running task: {request.task_type}")
 
     try:
-        if request.task_type == "audit_text":
-            text = request.payload.get("text", "")
-            result = audit_text(text)
-        elif request.task_type == "detect_bias":
-            text = request.payload.get("text", "")
-            result = detect_bias(text)
-        elif request.task_type == "validate_chain":
-            chain = request.payload.get("chain", [])
-            result = validate_chain(chain)
-        elif request.task_type == "check_sources":
-            sources = request.payload.get("sources", [])
-            result = check_sources(sources)
-        else:
-            result = {"error": f"Unknown task type: {request.task_type}"}
+        # Build payload for brain processing
+        payload = dict(request.payload)
+
+        # If task_type is explicitly specified, ensure payload has right structure
+        if request.task_type == "audit_text" and "text" not in payload:
+            # Allow backward compatibility with old API
+            payload["text"] = payload.get("text", "")
+        elif request.task_type == "validate_chain" and "steps" not in payload:
+            # Support both "chain" and "steps" keys
+            if "chain" in payload:
+                payload["steps"] = payload["chain"]
+        elif request.task_type == "check_sources" and "sources" not in payload:
+            payload["sources"] = payload.get("sources", [])
+
+        # Process through VeritasBrain
+        result = brain.process(payload)
 
         return {
             "ok": True,
-            "task_type": request.task_type,
-            "result": result,
+            "task_type": result["task_type"],
+            "summary": result["summary"],
+            "details": result["details"],
         }
     except Exception as e:
         logger.error(f"Task execution error: {e}")
@@ -113,6 +125,7 @@ async def get_status() -> Dict[str, Any]:
     Get the current status of the Veritas service.
 
     Returns operational status of all components including:
+    - VeritasBrain reasoning engine
     - Logic auditor
     - Bias detector
     - Chain validator
@@ -122,9 +135,10 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.2.0",
-        "phase": 2,
+        "version": "0.3.0",
+        "phase": 3,
         "components": {
+            "brain": "active",
             "auditor": "active",
             "bias_detector": "active",
             "chain_validator": "active",
@@ -157,13 +171,48 @@ async def submit_event(request: EventRequest) -> Dict[str, Any]:
 
     Events can include external triggers, notifications,
     or data updates that Veritas should process.
+
+    Supported event types:
+    - analyze: Run full analysis on event data
+    - audit: Run audit analysis
+    - validate: Run chain validation
+    - check: Run source checking
+
+    Other event types are logged but not processed.
     """
     logger.info(f"Event received: {request.event_type}")
+
+    # Event types that trigger brain processing
+    processable_events = {"analyze", "audit", "validate", "check"}
+
+    if request.event_type in processable_events:
+        try:
+            # Process through VeritasBrain
+            result = brain.process(request.data)
+
+            return {
+                "ok": True,
+                "event_type": request.event_type,
+                "processed": True,
+                "task_type": result["task_type"],
+                "summary": result["summary"],
+                "details": result["details"],
+            }
+        except Exception as e:
+            logger.error(f"Event processing error: {e}")
+            return {
+                "ok": False,
+                "event_type": request.event_type,
+                "processed": False,
+                "error": str(e),
+            }
+
+    # Non-processable events are logged only
     return {
         "ok": True,
         "event_type": request.event_type,
         "processed": False,
-        "message": "Event processing not implemented in Phase 2",
+        "message": f"Event type '{request.event_type}' logged but not processed",
     }
 
 

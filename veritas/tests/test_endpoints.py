@@ -2,7 +2,7 @@
 Veritas API Endpoint Tests
 
 This module tests all API endpoints for proper response codes and JSON structure.
-Phase 2: Tests for actual analysis functionality.
+Phase 3: Tests for VeritasBrain integration.
 """
 
 import pytest
@@ -41,8 +41,10 @@ class TestVeritasEndpoints:
         assert "ok" in data
         assert data["ok"] is True
         assert "components" in data
+        assert data["components"]["brain"] == "active"
         assert data["components"]["auditor"] == "active"
         assert data["components"]["bias_detector"] == "active"
+        assert data["phase"] == 3
 
     def test_run_task_audit(self, client):
         """Test the run_task endpoint with audit_text task."""
@@ -58,19 +60,71 @@ class TestVeritasEndpoints:
         assert "ok" in data
         assert data["ok"] is True
         assert data["task_type"] == "audit_text"
-        assert "result" in data
+        assert "summary" in data
+        assert "details" in data
 
-    def test_run_task_unknown(self, client):
-        """Test the run_task endpoint with unknown task type."""
+    def test_run_task_with_text_returns_summary(self, client):
+        """Test that run_task with text returns proper summary structure."""
         response = client.post(
             "/run_task",
-            json={"task_type": "unknown_task", "payload": {}}
+            json={
+                "task_type": "audit_text",
+                "payload": {"text": "Simple test text"}
+            }
         )
         assert response.status_code == 200
         data = response.json()
-        assert "ok" in data
-        assert "result" in data
-        assert "error" in data["result"]
+        assert "has_major_issues" in data["summary"]
+        assert "issue_types" in data["summary"]
+        assert "confidence_estimate" in data["summary"]
+
+    def test_run_task_with_steps_returns_chain_validation(self, client):
+        """Test that run_task with steps returns chain validation."""
+        response = client.post(
+            "/run_task",
+            json={
+                "task_type": "validate_chain",
+                "payload": {"steps": ["Step A", "Step B"]}
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_type"] == "validate_chain"
+        assert data["details"]["chain"] is not None
+
+    def test_run_task_with_sources_returns_source_check(self, client):
+        """Test that run_task with sources returns source check."""
+        response = client.post(
+            "/run_task",
+            json={
+                "task_type": "check_sources",
+                "payload": {"sources": ["http://example.com"]}
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_type"] == "check_sources"
+        assert data["details"]["sources"] is not None
+
+    def test_run_task_composite(self, client):
+        """Test that run_task handles composite payloads."""
+        response = client.post(
+            "/run_task",
+            json={
+                "task_type": "composite",
+                "payload": {
+                    "text": "Test text",
+                    "steps": ["A", "B"],
+                    "sources": ["http://example.com"]
+                }
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["task_type"] == "composite_audit"
+        assert data["details"]["audit"] is not None
+        assert data["details"]["chain"] is not None
+        assert data["details"]["sources"] is not None
 
     def test_shutdown(self, client):
         """Test the shutdown endpoint returns response."""
@@ -91,6 +145,42 @@ class TestVeritasEndpoints:
         assert "ok" in data
         assert data["ok"] is True
         assert "event_type" in data
+
+    def test_event_analyze_processes_data(self, client):
+        """Test the event endpoint processes analyze events."""
+        response = client.post(
+            "/event",
+            json={"event_type": "analyze", "data": {"text": "Text to analyze"}}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["processed"] is True
+        assert "summary" in data
+        assert "details" in data
+
+    def test_event_audit_processes_data(self, client):
+        """Test the event endpoint processes audit events."""
+        response = client.post(
+            "/event",
+            json={"event_type": "audit", "data": {"text": "Text to audit"}}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["processed"] is True
+
+    def test_event_non_processable_logged_only(self, client):
+        """Test non-processable events are logged but not processed."""
+        response = client.post(
+            "/event",
+            json={"event_type": "notification", "data": {"msg": "info"}}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["ok"] is True
+        assert data["processed"] is False
+        assert "message" in data
 
 
 class TestAuditTextEndpoint:
