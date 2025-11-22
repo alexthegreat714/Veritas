@@ -2,6 +2,7 @@
 Veritas API Endpoint Tests
 
 This module tests all API endpoints for proper response codes and JSON structure.
+Phase 2: Tests for actual analysis functionality.
 """
 
 import pytest
@@ -39,30 +40,45 @@ class TestVeritasEndpoints:
         data = response.json()
         assert "ok" in data
         assert data["ok"] is True
-        assert "message" in data
         assert "components" in data
+        assert data["components"]["auditor"] == "active"
+        assert data["components"]["bias_detector"] == "active"
 
-    def test_run_task(self, client):
-        """Test the run_task endpoint accepts task requests."""
+    def test_run_task_audit(self, client):
+        """Test the run_task endpoint with audit_text task."""
         response = client.post(
             "/run_task",
-            json={"task_type": "test_task", "payload": {"key": "value"}}
+            json={
+                "task_type": "audit_text",
+                "payload": {"text": "This is a test statement."}
+            }
         )
         assert response.status_code == 200
         data = response.json()
         assert "ok" in data
         assert data["ok"] is True
-        assert "message" in data
-        assert data["task_type"] == "test_task"
+        assert data["task_type"] == "audit_text"
+        assert "result" in data
+
+    def test_run_task_unknown(self, client):
+        """Test the run_task endpoint with unknown task type."""
+        response = client.post(
+            "/run_task",
+            json={"task_type": "unknown_task", "payload": {}}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "ok" in data
+        assert "result" in data
+        assert "error" in data["result"]
 
     def test_shutdown(self, client):
-        """Test the shutdown endpoint returns stub response."""
+        """Test the shutdown endpoint returns response."""
         response = client.post("/shutdown")
         assert response.status_code == 200
         data = response.json()
         assert "ok" in data
         assert data["ok"] is True
-        assert "message" in data
 
     def test_event(self, client):
         """Test the event endpoint accepts event submissions."""
@@ -76,25 +92,131 @@ class TestVeritasEndpoints:
         assert data["ok"] is True
         assert "event_type" in data
 
-    def test_audit_text(self, client):
-        """Test the audit_text endpoint accepts text for auditing."""
+
+class TestAuditTextEndpoint:
+    """Tests for the audit_text endpoint."""
+
+    def test_audit_text_basic(self, client):
+        """Test audit_text endpoint returns analysis results."""
         response = client.post(
             "/audit_text",
-            json={"text": "This is a test statement to audit."}
+            json={"text": "This is a test statement that makes a claim."}
         )
         assert response.status_code == 200
         data = response.json()
         assert "ok" in data
         assert data["ok"] is True
-        assert "audit_result" in data
-        assert "text_length" in data
+        assert "claims" in data
+        assert "logical_fallacies" in data
+        assert "inconsistencies" in data
+        assert "unsupported_jumps" in data
+        assert isinstance(data["claims"], list)
+        assert isinstance(data["logical_fallacies"], list)
 
-    def test_validate_chain(self, client):
-        """Test the validate_chain endpoint accepts reasoning chains."""
+    def test_audit_text_detects_fallacy(self, client):
+        """Test audit_text detects logical fallacies."""
+        response = client.post(
+            "/audit_text",
+            json={"text": "You are stupid, therefore your argument is wrong."}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["logical_fallacies"]) > 0
+
+    def test_audit_text_empty(self, client):
+        """Test audit_text handles empty text."""
+        response = client.post(
+            "/audit_text",
+            json={"text": ""}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["claims"] == []
+        assert data["logical_fallacies"] == []
+
+    def test_audit_text_extracts_claims(self, client):
+        """Test audit_text extracts claims from text."""
+        response = client.post(
+            "/audit_text",
+            json={"text": "The sky is blue. Water is wet. All humans need oxygen."}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["claims"]) > 0
+
+
+class TestDetectBiasEndpoint:
+    """Tests for the detect_bias endpoint."""
+
+    def test_detect_bias_basic(self, client):
+        """Test detect_bias endpoint returns bias scores."""
+        response = client.post(
+            "/detect_bias",
+            json={"text": "This is a neutral statement."}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "ok" in data
+        assert data["ok"] is True
+        assert "political_bias" in data
+        assert "emotional_bias" in data
+        assert "motivational_bias" in data
+        assert "certainty_overconfidence" in data
+
+    def test_detect_bias_scores_are_floats(self, client):
+        """Test that bias scores are floats between 0 and 1."""
+        response = client.post(
+            "/detect_bias",
+            json={"text": "This is absolutely amazing and incredible!"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data["political_bias"], float)
+        assert isinstance(data["emotional_bias"], float)
+        assert 0.0 <= data["political_bias"] <= 1.0
+        assert 0.0 <= data["emotional_bias"] <= 1.0
+
+    def test_detect_bias_emotional_content(self, client):
+        """Test detect_bias flags emotional content."""
+        response = client.post(
+            "/detect_bias",
+            json={"text": "This is absolutely terrible and disgusting! A complete disaster!"}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["emotional_bias"] > 0.0
+
+    def test_detect_bias_certainty_markers(self, client):
+        """Test detect_bias flags certainty markers."""
+        response = client.post(
+            "/detect_bias",
+            json={"text": "Obviously this is true. Clearly everyone knows this. Undoubtedly correct."}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["certainty_overconfidence"] > 0.0
+
+    def test_detect_bias_empty(self, client):
+        """Test detect_bias handles empty text."""
+        response = client.post(
+            "/detect_bias",
+            json={"text": ""}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["political_bias"] == 0.0
+        assert data["emotional_bias"] == 0.0
+
+
+class TestValidateChainEndpoint:
+    """Tests for the validate_chain endpoint."""
+
+    def test_validate_chain_basic(self, client):
+        """Test validate_chain endpoint returns validation results."""
         response = client.post(
             "/validate_chain",
             json={
-                "chain": ["Premise 1", "Therefore, Conclusion"],
+                "chain": ["Premise one", "Therefore, conclusion"],
                 "context": "Test context"
             }
         )
@@ -102,26 +224,94 @@ class TestVeritasEndpoints:
         data = response.json()
         assert "ok" in data
         assert data["ok"] is True
-        assert "validation_result" in data
-        assert "chain_length" in data
-        assert data["chain_length"] == 2
+        assert "gaps" in data
+        assert "contradictions" in data
+        assert "circular_logic" in data
+        assert "flawed_premises" in data
+        assert isinstance(data["gaps"], list)
 
-    def test_check_sources(self, client):
-        """Test the check_sources endpoint accepts source lists."""
+    def test_validate_chain_empty(self, client):
+        """Test validate_chain handles empty chain."""
+        response = client.post(
+            "/validate_chain",
+            json={"chain": []}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["chain_length"] == 0
+        assert data["gaps"] == []
+
+    def test_validate_chain_detects_flawed_premise(self, client):
+        """Test validate_chain detects flawed premises."""
+        response = client.post(
+            "/validate_chain",
+            json={
+                "chain": [
+                    "Assume that all birds can fly",
+                    "Penguins are birds",
+                    "Therefore penguins can fly"
+                ]
+            }
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Should detect assumption in first premise
+        assert len(data["flawed_premises"]) > 0
+
+
+class TestCheckSourcesEndpoint:
+    """Tests for the check_sources endpoint."""
+
+    def test_check_sources_basic(self, client):
+        """Test check_sources endpoint returns check results."""
         response = client.post(
             "/check_sources",
             json={
-                "sources": ["https://example.com/source1", "https://example.com/source2"],
-                "claims": ["Test claim 1"]
+                "sources": ["https://example.com/article"],
+                "claims": ["Test claim"]
             }
         )
         assert response.status_code == 200
         data = response.json()
         assert "ok" in data
         assert data["ok"] is True
-        assert "check_result" in data
-        assert "sources_count" in data
-        assert data["sources_count"] == 2
+        assert "missing_sources" in data
+        assert "unverifiable" in data
+        assert "ranked_confidence" in data
+        assert isinstance(data["ranked_confidence"], list)
+
+    def test_check_sources_empty(self, client):
+        """Test check_sources handles empty sources list."""
+        response = client.post(
+            "/check_sources",
+            json={"sources": []}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["sources_count"] == 0
+
+    def test_check_sources_trusted_domain(self, client):
+        """Test check_sources gives high score to trusted domains."""
+        response = client.post(
+            "/check_sources",
+            json={"sources": ["https://www.nature.com/articles/test"]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["ranked_confidence"]) > 0
+        assert data["ranked_confidence"][0]["confidence"] >= 0.7
+
+    def test_check_sources_invalid_url(self, client):
+        """Test check_sources handles invalid URLs."""
+        response = client.post(
+            "/check_sources",
+            json={"sources": ["not a valid url", "also invalid"]}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        # Should classify as unverifiable or low confidence
+        assert (len(data["unverifiable"]) > 0 or
+                all(s["confidence"] < 0.5 for s in data["ranked_confidence"]))
 
 
 class TestEndpointValidation:
@@ -135,6 +325,11 @@ class TestEndpointValidation:
     def test_audit_text_requires_text(self, client):
         """Test that audit_text requires text field."""
         response = client.post("/audit_text", json={})
+        assert response.status_code == 422
+
+    def test_detect_bias_requires_text(self, client):
+        """Test that detect_bias requires text field."""
+        response = client.post("/detect_bias", json={})
         assert response.status_code == 422
 
     def test_validate_chain_requires_chain(self, client):

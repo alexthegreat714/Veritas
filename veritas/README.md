@@ -2,39 +2,163 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Purpose
+## Current Status: Phase 2
 
-Veritas provides the following core capabilities:
+**Phase 2 implements deterministic, heuristic-based analysis tools.**
 
-- **Truth Auditing**: Analyze text for factual accuracy and logical consistency
-- **Logic Checking**: Identify logical fallacies, contradictions, and unsupported claims
-- **Bias Detection**: Detect political, emotional, and selection biases in content
-- **Chain-of-Thought Validation**: Verify the logical flow and coherence of reasoning chains
-- **Source Verification**: Assess source credibility and cross-reference claims
+All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 
-## Phase 1 Status
+## Core Tools
 
-**This is Phase 1 of Veritas development.**
+### 1. Logic Auditor (`/audit_text`)
 
-Phase 1 contains only scaffolding and stub implementations. All endpoints and logic modules return placeholder responses. No actual truth auditing, bias detection, or validation logic is implemented yet.
+Analyzes text for logical consistency, claims, fallacies, and reasoning issues.
 
-### What's Included in Phase 1
+**Input:**
+```json
+{
+  "text": "You are stupid, so your argument is wrong. Obviously this is true."
+}
+```
 
-- Complete project structure and module organization
-- FastAPI application with all planned endpoints
-- Stub implementations for all logic modules
-- RAG system scaffolding (no embeddings or retrieval)
-- Test scaffolding with passing tests for stub responses
-- Configuration management structure
+**Output:**
+```json
+{
+  "ok": true,
+  "claims": [
+    {"text": "...", "type": "factual|universal|causal|normative", "position": 0}
+  ],
+  "logical_fallacies": [
+    {"type": "Ad Hominem", "description": "...", "matched_text": "...", "position": 0}
+  ],
+  "inconsistencies": [],
+  "unsupported_jumps": [
+    {"text": "...", "type": "unjustified_certainty", "reason": "...", "position": 0}
+  ]
+}
+```
 
-### What's NOT Included in Phase 1
+**Detected Fallacies:**
+- Ad Hominem
+- Straw Man
+- Circular Reasoning
+- False Dichotomy
+- Appeal to Authority
+- Appeal to Emotion
+- Slippery Slope
+- Red Herring
+- Hasty Generalization
+- False Cause
 
-- Actual logic auditing algorithms
-- Real bias detection models
-- Chain validation logic
-- Source verification functionality
-- RAG embeddings and retrieval
-- External API integrations
+### 2. Bias Detector (`/detect_bias`)
+
+Detects various forms of bias using heuristic word lists and pattern matching.
+
+**Input:**
+```json
+{
+  "text": "This is absolutely terrible! Obviously everyone knows this is wrong."
+}
+```
+
+**Output:**
+```json
+{
+  "ok": true,
+  "political_bias": 0.0,
+  "emotional_bias": 0.45,
+  "motivational_bias": 0.0,
+  "certainty_overconfidence": 0.38
+}
+```
+
+**Bias Types (0.0-1.0 normalized scores):**
+- `political_bias`: Partisan language intensity
+- `emotional_bias`: Loaded/emotional language
+- `motivational_bias`: Persuasive/self-serving patterns
+- `certainty_overconfidence`: Unjustified certainty markers
+
+### 3. Chain Validator (`/validate_chain`)
+
+Validates chains of reasoning for logical coherence.
+
+**Input:**
+```json
+{
+  "chain": [
+    "Assume that all birds can fly",
+    "Penguins are birds",
+    "Therefore penguins can fly"
+  ]
+}
+```
+
+**Output:**
+```json
+{
+  "ok": true,
+  "gaps": [],
+  "contradictions": [],
+  "circular_logic": [],
+  "flawed_premises": [
+    {"step_index": 0, "step": "...", "issues": [{"type": "unverified_assumption"}]}
+  ]
+}
+```
+
+**Detection Capabilities:**
+- Gaps in reasoning (missing intermediate steps)
+- Contradictions between steps
+- Circular logic patterns
+- Flawed/weak premises
+
+### 4. Source Checker (`/check_sources`)
+
+Validates and scores source credibility without external requests.
+
+**Input:**
+```json
+{
+  "sources": [
+    "https://www.nature.com/articles/test",
+    "https://random-blog.blogspot.com/post",
+    "not a valid url"
+  ]
+}
+```
+
+**Output:**
+```json
+{
+  "ok": true,
+  "missing_sources": [],
+  "unverifiable": [{"index": 2, "source": "not a valid url", "issues": ["invalid_format"]}],
+  "conflicting": [],
+  "ranked_confidence": [
+    {"index": 0, "source": "...", "type": "url", "confidence": 0.85},
+    {"index": 1, "source": "...", "type": "url", "confidence": 0.35}
+  ]
+}
+```
+
+**Credibility Scoring:**
+- `.edu`, `.gov`, academic journals: 0.80-0.85
+- Major news (Reuters, AP, BBC): 0.70-0.75
+- Reference sites (Wikipedia, Britannica): 0.60-0.75
+- Social media, blogs: 0.20-0.45
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Service information |
+| `/health` | GET | Health check |
+| `/status` | GET | Component status |
+| `/run_task` | POST | Execute a task by type |
+| `/audit_text` | POST | Audit text for logic issues |
+| `/detect_bias` | POST | Detect bias in text |
+| `/validate_chain` | POST | Validate reasoning chain |
+| `/check_sources` | POST | Check source credibility |
 
 ## Installation
 
@@ -45,147 +169,91 @@ Phase 1 contains only scaffolding and stub implementations. All endpoints and lo
 
 ### Setup
 
-1. Clone the repository and navigate to the veritas directory:
-
 ```bash
 cd veritas
-```
-
-2. Create a virtual environment (recommended):
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-```
-
-3. Install dependencies:
-
-```bash
 pip install -r requirements.txt
 ```
 
 ## Running the Server
 
-Start the FastAPI server with:
-
 ```bash
 uvicorn app.main:app --reload
 ```
 
-The server will start at `http://localhost:8000`.
-
-### API Documentation
-
-Once running, access the interactive API documentation:
+The server starts at `http://localhost:8000`.
 
 - Swagger UI: `http://localhost:8000/docs`
 - ReDoc: `http://localhost:8000/redoc`
 
-## API Endpoints
+## Running Tests
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/` | GET | Service information |
-| `/health` | GET | Health check |
-| `/status` | GET | Component status |
-| `/run_task` | POST | Execute a task |
-| `/shutdown` | POST | Initiate shutdown |
-| `/event` | POST | Submit an event |
-| `/audit_text` | POST | Audit text for truth/logic |
-| `/validate_chain` | POST | Validate reasoning chain |
-| `/check_sources` | POST | Verify source credibility |
+```bash
+PYTHONPATH=. pytest tests/ -v
+```
 
 ## Project Structure
 
 ```
 veritas/
 ├── app/
-│   ├── main.py              # FastAPI application entry point
-│   ├── config.py            # Configuration settings
-│   ├── routes/
-│   │   └── veritas.py       # API route handlers
-│   ├── tools/
-│   │   └── __init__.py      # Tool registry (future)
+│   ├── main.py              # FastAPI entry point
+│   ├── config.py            # Configuration
+│   ├── routes/veritas.py    # API endpoints
 │   ├── logic/
-│   │   ├── auditor.py       # Logic auditing
-│   │   ├── bias_detector.py # Bias detection
-│   │   ├── chain_validator.py # Chain validation
-│   │   └── source_checker.py  # Source verification
-│   ├── rag/
-│   │   ├── ingest.py        # Document ingestion
-│   │   └── query.py         # Semantic search
-│   ├── memory/
-│   │   ├── short/           # Short-term memory storage
-│   │   └── long/            # Long-term memory storage
+│   │   ├── auditor.py       # Logic auditing (Phase 2)
+│   │   ├── bias_detector.py # Bias detection (Phase 2)
+│   │   ├── chain_validator.py # Chain validation (Phase 2)
+│   │   └── source_checker.py  # Source verification (Phase 2)
+│   ├── rag/                 # RAG system (stub)
+│   ├── tools/               # Tool registry (stub)
+│   ├── memory/              # Memory storage
 │   └── logs/                # Application logs
-├── tests/
-│   ├── conftest.py          # Test fixtures
-│   ├── test_endpoints.py    # API endpoint tests
-│   ├── test_auditor.py      # Auditor tests
-│   ├── test_bias.py         # Bias detector tests
-│   └── test_chain_validator.py # Chain validator tests
-├── requirements.txt         # Python dependencies
-└── README.md               # This file
+├── tests/                   # Test suite
+├── requirements.txt
+└── README.md
 ```
 
-## Running Tests
+## Design Philosophy
 
-Execute the test suite with pytest:
+Veritas is:
 
-```bash
-pytest tests/ -v
-```
+- **Deterministic**: Same input always produces same output
+- **Heuristic-based**: Uses pattern matching, not ML models
+- **Analytical**: Focused on factual accuracy and logical rigor
+- **Objective**: No emotional or narrative behavior
+- **Transparent**: All analysis is interpretable
+
+## Implementation Notes
+
+- All logic is deterministic and rule-based
+- No external API calls or web requests
+- No ML models - only regex patterns and word lists
+- All outputs are structured JSON
+- Logging enabled for all operations
 
 ## Roadmap
 
-### Phase 2 (Planned)
-
-- Implement logic auditing algorithms
-- Add fallacy detection patterns
-- Develop claim extraction
-- Integrate consistency checking
-
 ### Phase 3 (Planned)
 
-- Implement bias detection models
-- Add political bias analysis
-- Develop emotional bias detection
-- Create selection bias identification
+- Enhanced pattern libraries
+- Confidence calibration
+- Cross-tool integration
+- Performance optimization
 
 ### Phase 4 (Planned)
-
-- Implement chain validation logic
-- Add gap detection algorithms
-- Develop circular reasoning detection
-- Integrate hidden assumption extraction
-
-### Phase 5 (Planned)
-
-- Implement source verification
-- Add credibility scoring
-- Develop cross-reference checking
-- Integrate citation validation
-
-### Phase 6 (Planned)
 
 - RAG system implementation
 - Embedding generation
 - Vector store integration
 - Semantic search functionality
 
-## Design Philosophy
+### Phase 5 (Planned)
 
-Veritas is designed to be:
+- External API integration (optional)
+- Real-time source verification
+- Content fetching and analysis
+- Fact-checking capabilities
 
-- **Analytical**: Focused on factual accuracy and logical rigor
-- **Objective**: No emotional or narrative behavior
-- **Systematic**: Structured approach to truth verification
-- **Transparent**: Clear reasoning and source attribution
+## Disclaimer
 
-## License
-
-[License information to be added]
-
-## Contributing
-
-[Contributing guidelines to be added]
+Phase 2 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only.
