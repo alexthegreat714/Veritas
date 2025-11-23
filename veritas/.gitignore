@@ -68,3 +68,7 @@ Thumbs.db
 # Local development
 *.log
 *.sqlite3
+
+# RAG corpus data (runtime generated)
+app/memory/long/veritas_corpus.jsonl
+memory/long/veritas_corpus.jsonl
