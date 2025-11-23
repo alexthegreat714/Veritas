@@ -25,7 +25,7 @@ from logging.handlers import RotatingFileHandler
 from app.logic.auditor import audit_text
 from app.logic.bias_detector import detect_bias
 from app.logic.chain_validator import validate_chain
-from app.logic.source_checker import check_sources
+from app.logic.source_checker import check_sources, SourceChecker
 from app.rag.query import RAGQuery, query_relevant_documents
 
 
@@ -818,3 +818,186 @@ def get_brain() -> VeritasBrain:
     if _brain_instance is None:
         _brain_instance = VeritasBrain()
     return _brain_instance
+
+
+# ============================================================================
+# Phase 3 Convenience Functions
+# ============================================================================
+# These functions provide the API expected by the Phase 3 spec while
+# leveraging the modular implementation.
+
+
+def audit_with_sources(
+    text: str,
+    sources: List[str],
+    include_bias: bool = True
+) -> Dict[str, Any]:
+    """
+    Combined audit function for text analysis with source validation.
+
+    This is a convenience function that combines:
+    - Text auditing (logical fallacies, inconsistencies)
+    - Bias detection (optional)
+    - Source credibility checking
+
+    Phase 3 spec: audit_with_sources(text, sources) -> combined analysis
+
+    Args:
+        text: The text content to audit.
+        sources: List of source URLs or citations to validate.
+        include_bias: Whether to include bias detection (default True).
+
+    Returns:
+        Dictionary containing:
+        - text_audit: Results from audit_text()
+        - bias_analysis: Results from detect_bias() (if include_bias)
+        - source_validation: Results from check_sources()
+        - combined_assessment: Overall assessment
+    """
+    logger.info(f"audit_with_sources: text_len={len(text)}, sources_count={len(sources)}")
+
+    results = {
+        "text_audit": None,
+        "bias_analysis": None,
+        "source_validation": None,
+        "combined_assessment": {},
+    }
+
+    # Run text audit
+    if text:
+        results["text_audit"] = audit_text(text)
+
+        # Optional bias detection
+        if include_bias:
+            results["bias_analysis"] = detect_bias(text)
+
+    # Run source validation
+    if sources:
+        results["source_validation"] = check_sources(sources)
+
+    # Generate combined assessment
+    has_issues = False
+    issue_types = []
+    confidence = 0.8
+
+    # Check text audit issues
+    if results["text_audit"]:
+        audit = results["text_audit"]
+        if audit.get("logical_fallacies"):
+            has_issues = True
+            issue_types.append("logical_fallacies")
+            confidence -= 0.1
+        if audit.get("inconsistencies"):
+            has_issues = True
+            issue_types.append("inconsistencies")
+            confidence -= 0.1
+
+    # Check bias issues
+    if results["bias_analysis"]:
+        bias = results["bias_analysis"]
+        if bias.get("political_bias", 0) > 0.6:
+            has_issues = True
+            issue_types.append("high_political_bias")
+            confidence -= 0.05
+        if bias.get("emotional_bias", 0) > 0.6:
+            has_issues = True
+            issue_types.append("high_emotional_bias")
+            confidence -= 0.05
+
+    # Check source issues
+    if results["source_validation"]:
+        sources_result = results["source_validation"]
+        if sources_result.get("unverifiable"):
+            has_issues = True
+            issue_types.append("unverifiable_sources")
+            confidence -= 0.1
+        if sources_result.get("missing_sources"):
+            issue_types.append("missing_sources")
+            confidence -= 0.05
+
+        # Calculate average source credibility
+        ranked = sources_result.get("ranked_confidence", [])
+        if ranked:
+            avg_cred = sum(r["confidence"] for r in ranked) / len(ranked)
+            if avg_cred < 0.4:
+                has_issues = True
+                issue_types.append("low_source_credibility")
+                confidence -= 0.15
+
+    results["combined_assessment"] = {
+        "has_issues": has_issues,
+        "issue_types": issue_types,
+        "confidence": max(0.1, min(1.0, confidence)),
+        "recommendation": _get_recommendation(has_issues, issue_types),
+    }
+
+    logger.info(f"audit_with_sources complete: has_issues={has_issues}")
+    return results
+
+
+def _get_recommendation(has_issues: bool, issue_types: List[str]) -> str:
+    """Generate recommendation based on issues found."""
+    if not has_issues:
+        return "Content appears reliable with credible sources."
+
+    if "logical_fallacies" in issue_types and "unverifiable_sources" in issue_types:
+        return "Content has logical issues and questionable sources. Requires significant revision."
+    elif "logical_fallacies" in issue_types:
+        return "Content has logical issues. Recommend reviewing reasoning structure."
+    elif "unverifiable_sources" in issue_types or "low_source_credibility" in issue_types:
+        return "Sources need verification. Consider adding credible references."
+    elif "high_political_bias" in issue_types or "high_emotional_bias" in issue_types:
+        return "Content shows bias. Consider more neutral framing."
+    else:
+        return "Minor issues detected. Review flagged items."
+
+
+def validate_sources(
+    sources: List[str],
+    claims: Optional[List[str]] = None
+) -> Dict[str, Any]:
+    """
+    Validate a list of sources for credibility and format.
+
+    This is a convenience function that wraps check_sources()
+    with additional validation details.
+
+    Phase 3 spec: validate_sources(sources) -> validation results
+
+    Args:
+        sources: List of source URLs or citations to validate.
+        claims: Optional list of claims the sources should support.
+
+    Returns:
+        Dictionary containing:
+        - valid: Whether sources meet minimum credibility threshold
+        - sources_checked: Number of sources evaluated
+        - credibility_scores: Per-source credibility scores
+        - verified_sources: List of sources meeting threshold
+        - unverified_sources: List of sources below threshold
+        - warnings: List of warning messages
+        - details: Full check_sources() results
+    """
+    logger.info(f"validate_sources: count={len(sources)}")
+
+    # Use SourceChecker for comprehensive validation
+    checker = SourceChecker()
+    result = checker.check(sources, claims)
+
+    # Determine overall validity
+    verified_count = len(result.get("verified_sources", []))
+    total_count = len(sources) if sources else 0
+
+    is_valid = verified_count > 0 and (verified_count / max(total_count, 1)) >= 0.5
+
+    return {
+        "valid": is_valid,
+        "sources_checked": total_count,
+        "verified_count": verified_count,
+        "unverified_count": total_count - verified_count,
+        "credibility_scores": result.get("credibility_scores", {}),
+        "verified_sources": result.get("verified_sources", []),
+        "unverified_sources": result.get("unverified_sources", []),
+        "warnings": result.get("warnings", []),
+        "details": result.get("details", {}),
+    }
