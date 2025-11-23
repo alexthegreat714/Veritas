@@ -72,3 +72,8 @@ Thumbs.db
 # RAG corpus data (runtime generated)
 app/memory/long/veritas_corpus.jsonl
 memory/long/veritas_corpus.jsonl
+
+# Long-term memory storage (runtime generated)
+app/memory/long_term/disputes/
+app/memory/long_term/audits/
+app/memory/long_term/monitoring/
