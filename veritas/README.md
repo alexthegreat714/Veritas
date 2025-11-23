@@ -2,25 +2,28 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 8
+## Current Status: Phase 9
 
-**Phase 8 implements Dispute Resolution Hooks (Non-Judicial).**
+**Phase 9 implements Automated Monitoring, Drift Detection, Bias Trends, and Long-Term Logging.**
 
 Veritas now:
-- Parses and classifies disputes between agents
-- Identifies factual vs. interpretation disagreements
-- Recommends escalation targets (Sophia/Aegis/Congress)
-- Stores dispute analyses for audit trails
+- Detects logical drift over time (increasing issues, inconsistencies)
+- Tracks bias trends (emotional language, loaded framing accumulation)
+- Detects anomalies (sudden deviations from normal patterns)
+- Stores monitoring snapshots for long-term analysis
+- Provides automated health status (stable/warning/critical)
 
-**Important:** Veritas does NOT:
+**Important:** Veritas monitors only — never intervenes or takes autonomous actions.
+All monitoring results are reported to Sky/Congress for their decision-making.
+
+Veritas does NOT:
 - Rule on ethics or law (that's Sophia's domain)
 - Rule on security or danger (that's Aegis's domain)
 - Override Congress, Sky, or any agent
 - Actually escalate or forward events
+- Intervene based on monitoring results
 
-Veritas only classifies what kind of disagreement it is, provides fact-logic analysis, and identifies whether external escalation is required. Actual escalation is handled by Sky/n8n.
-
-Previous phases include: structured schema audits, Congress review tools, legislative functions, Event API, and RAG memory.
+Previous phases include: dispute resolution, structured schema audits, Congress review tools, legislative functions, Event API, and RAG memory.
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 Veritas adjudicates **logic, not policy**. It does not evaluate morality, cost, or political alignment.
@@ -688,7 +691,8 @@ The `/event/congress` endpoint provides structured event handling for Congress w
 |------------|-------------|----------------|
 | `bill_for_review` | Review a bill for logical issues | `bill_id`, `text`, `sources` (optional) |
 | `statement_for_audit` | Audit a statement for truth/bias | `statement_id`, `text`, `sources` (optional) |
-| `dispute_for_analysis` | Analyze a dispute (stub) | `dispute_id`, `parties`, `claims` |
+| `dispute_for_analysis` | Analyze a dispute between agents | `agent_A`, `agent_B` |
+| `monitoring_cycle` | Run drift/bias/anomaly monitoring | `limit` (optional, default 10) |
 
 ### Bill Review Example
 
@@ -859,6 +863,118 @@ Disputes are stored in `app/memory/long_term/disputes/` for audit trails:
 - Includes timestamp, agent names, analysis, recommendation
 - Can be queried for historical analysis
 
+## Automated Monitoring (Phase 9)
+
+The monitoring engine provides continuous evaluation of agent outputs over time, detecting drift, bias trends, and anomalies.
+
+**Important:** Veritas monitors only — never intervenes or takes autonomous actions.
+All monitoring results are reported for review.
+
+### Monitoring Cycle
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event/congress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "monitoring_cycle",
+    "payload": {"limit": 10}
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "event_type": "monitoring_cycle",
+  "result": {
+    "logical_drift": {
+      "drift_score": 0.15,
+      "increasing_issue_types": [],
+      "possible_causes": [],
+      "is_concerning": false
+    },
+    "bias_trends": {
+      "bias_trend_score": 0.08,
+      "bias_types_increasing": [],
+      "summary": "No significant bias trends detected",
+      "is_concerning": false
+    },
+    "anomalies": {
+      "anomaly_detected": false,
+      "anomaly_reason": null,
+      "anomalies": [],
+      "statistics": {"mean_issues": 1.5, "std_issues": 0.8, "sample_size": 10}
+    },
+    "overall_status": "stable",
+    "timestamp": "2024-01-15T10:30:00.000000+00:00",
+    "audits_analyzed": 10,
+    "storage": {"stored": true, "file_path": "...", "snapshot_id": "..."}
+  }
+}
+```
+
+### Monitoring Components
+
+| Component | Description | Concern Threshold |
+|-----------|-------------|-------------------|
+| **Logical Drift** | Tracks increasing logical issues over time | 30% increase |
+| **Bias Trends** | Tracks accumulation of bias patterns | 30% rise |
+| **Anomaly Detection** | Detects sudden deviations (>2 std dev) | 2σ threshold |
+
+### Overall Status Values
+
+| Status | Condition |
+|--------|-----------|
+| `stable` | No drift, no bias trends, no anomalies |
+| `warning` | Any one category is concerning |
+| `critical` | 2+ categories are concerning |
+
+### Logical Drift Detection
+
+Identifies increases in:
+- Logical fallacies
+- Inconsistencies
+- Unsupported conclusions
+- Contradictions
+
+Returns `possible_causes` such as:
+- "Reasoning quality degradation"
+- "Internal consistency issues"
+- "Evidence gaps increasing"
+
+### Bias Trend Analysis
+
+Tracks accumulation of:
+- Emotional language
+- Political bias
+- Certainty overconfidence
+- Loaded framing
+
+### Anomaly Detection
+
+Detects sudden deviations using statistical analysis:
+- Computes mean and standard deviation of issue counts
+- Flags results that exceed 2 standard deviations
+- Reports `anomaly_reason` with specific deviation details
+
+### Monitoring Storage
+
+Snapshots are stored in `app/memory/long_term/monitoring/`:
+- JSON files named by timestamp (YYYY-MM-DD_HH-MM.json)
+- Includes full drift, bias, and anomaly analysis
+- Enables historical trend analysis
+
+### Tool Registry
+
+```python
+from app.tools import registry
+
+# Run monitoring cycle
+result = registry.invoke("run_monitoring", {"limit": 10})
+print(result["overall_status"])  # "stable", "warning", or "critical"
+```
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -920,8 +1036,9 @@ veritas/
 │   ├── config.py            # Configuration
 │   ├── schemas.py           # Pydantic models for structured output (Phase 7)
 │   ├── dispute_engine.py    # Dispute parsing and classification (Phase 8)
-│   ├── memory_utils.py      # Memory storage utilities (Phase 8)
-│   ├── routes/veritas.py    # API endpoints (Phase 8: Dispute Resolution)
+│   ├── monitoring_engine.py # Drift detection and monitoring (Phase 9)
+│   ├── memory_utils.py      # Memory storage utilities (Phase 8/9)
+│   ├── routes/veritas.py    # API endpoints (Phase 9: Monitoring)
 │   ├── logic/
 │   │   ├── brain.py         # VeritasBrain + handle_event + convenience functions
 │   │   ├── legislative.py   # Legislative functions (Phase 6)
@@ -933,17 +1050,20 @@ veritas/
 │   │   ├── ingest.py        # Document ingestion (Phase 4)
 │   │   └── query.py         # Embedding & similarity search (Phase 4)
 │   ├── tools/
-│   │   └── __init__.py      # Tool registry + Dispute tools (Phase 8)
+│   │   └── __init__.py      # Tool registry + Monitoring tools (Phase 9)
 │   ├── memory/
 │   │   └── long_term/
-│   │       └── disputes/    # Dispute analysis storage (Phase 8)
+│   │       ├── disputes/    # Dispute analysis storage (Phase 8)
+│   │       ├── audits/      # Audit storage (Phase 9)
+│   │       └── monitoring/  # Monitoring snapshots (Phase 9)
 │   └── logs/
 │       ├── veritas_brain.log        # Brain operations
 │       ├── veritas_contributions.log # Analysis audit trail
 │       ├── veritas_legislative.log  # Legislative operations
 │       ├── veritas_legislative_contributions.log # Legislative audit trail
 │       ├── rag_query.log            # RAG query logs
-│       └── memory_utils.log         # Memory operations
+│       ├── memory_utils.log         # Memory operations
+│       └── monitoring_engine.log    # Monitoring operations (Phase 9)
 ├── memory/
 │   └── long/
 │       └── veritas_corpus.jsonl  # Document corpus storage
@@ -957,6 +1077,9 @@ veritas/
 │   ├── test_event_handlers.py # Congress event handler tests (Phase 7)
 │   ├── test_dispute_engine.py # Dispute engine tests (Phase 8)
 │   ├── test_dispute_event.py  # Dispute event tests (Phase 8)
+│   ├── test_monitoring_engine.py # Monitoring engine tests (Phase 9)
+│   ├── test_monitoring_tool.py   # Monitoring tool tests (Phase 9)
+│   ├── test_monitoring_event.py  # Monitoring event tests (Phase 9)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -1054,14 +1177,31 @@ Veritas is:
 
 **Important:** Veritas does NOT escalate events. It only classifies and reports.
 
-### Phase 9 (Planned)
+### Phase 9 (Complete)
+
+- Automated Monitoring, Drift Detection, Bias Trends, and Long-Term Logging
+  - `detect_logical_drift()`: Identify increasing logical issues over time
+  - `analyze_bias_trends()`: Track accumulation of bias patterns
+  - `detect_anomalies()`: Detect sudden deviations (>2 std dev)
+  - `run_monitoring_cycle()`: Orchestrate all detection systems
+  - `MonitoringEngine` class for OOP interface
+- Overall status classification (stable/warning/critical)
+- Long-term storage for audits and monitoring snapshots
+  - `app/memory/long_term/audits/`: Audit result storage
+  - `app/memory/long_term/monitoring/`: Monitoring snapshot storage
+- `monitoring_cycle` event type for Congress
+- `tool_run_monitoring()` added to tool registry
+
+**Important:** Veritas monitors only — never intervenes or takes autonomous actions.
+
+### Phase 10 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 10 (Planned)
+### Phase 11 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -1070,4 +1210,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 8 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events.
+Phase 9 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events. **Monitoring results are informational** - Veritas monitors only and never intervenes or takes autonomous actions.

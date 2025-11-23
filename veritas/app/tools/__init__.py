@@ -6,6 +6,7 @@ Tools provide specialized capabilities that can be invoked by the truth auditing
 system to perform specific tasks.
 
 Phase 5: Dispute resolution tools added.
+Phase 6: Monitoring tools added.
 """
 
 import logging
@@ -24,7 +25,13 @@ from app.schemas import (
     CongressReviewResult,
 )
 from app.dispute_engine import parse_dispute, get_dispute_engine
-from app.memory_utils import store_dispute_analysis
+from app.memory_utils import (
+    store_dispute_analysis,
+    store_audit,
+    get_recent_audits,
+    store_monitoring_snapshot,
+)
+from app.monitoring_engine import run_monitoring_cycle, get_monitoring_engine
 
 
 logger = logging.getLogger(__name__)
@@ -492,6 +499,62 @@ def tool_parse_dispute(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ============================================================================
+# Monitoring Tools (Phase 6)
+# ============================================================================
+# NOTE: Veritas monitors only — never intervenes or takes autonomous actions.
+# All monitoring results are reported for review.
+
+
+def tool_run_monitoring(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Run a monitoring cycle to detect drift, bias trends, and anomalies.
+
+    NOTE: Veritas monitors only — never intervenes or takes autonomous actions.
+    Monitoring results are informational and returned to the caller for review.
+
+    Expects optional payload:
+    {
+        "limit": int  # Number of recent audits to analyze (default: 10)
+    }
+
+    Returns:
+        {
+            "logical_drift": {...},
+            "bias_trends": {...},
+            "anomalies": {...},
+            "overall_status": "stable" | "warning" | "critical",
+            "timestamp": str,
+            "audits_analyzed": int,
+            "storage": {...}
+        }
+
+    Steps:
+    1. Load recent audits from memory.
+    2. Run monitoring engine (drift, bias, anomaly detection).
+    3. Store snapshot in monitoring folder.
+    4. Return snapshot.
+    """
+    logger.info("tool_run_monitoring invoked")
+
+    limit = payload.get("limit", 10)
+
+    # Step 1: Load recent audits
+    recent_audits = get_recent_audits(limit=limit)
+    logger.info(f"Loaded {len(recent_audits)} recent audits")
+
+    # Step 2: Run monitoring cycle
+    snapshot = run_monitoring_cycle(recent_audits)
+
+    # Step 3: Store snapshot
+    storage_result = store_monitoring_snapshot(snapshot)
+    snapshot["storage"] = storage_result
+
+    logger.info(f"Monitoring cycle complete: status={snapshot.get('overall_status')}")
+
+    return snapshot
+
+
+# ============================================================================
 # Tool Registry
 # ============================================================================
 
@@ -520,6 +583,7 @@ class ToolRegistry:
                 p.get("sources", [])
             ).model_dump(),
             "parse_dispute": tool_parse_dispute,
+            "run_monitoring": tool_run_monitoring,
         }
         self._initialized = True
 
