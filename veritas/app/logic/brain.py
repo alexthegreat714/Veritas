@@ -8,7 +8,7 @@ This module contains the VeritasBrain class that coordinates:
 - Structured output synthesis
 - Contribution logging
 
-Phase 3: Core reasoning pipeline implementation.
+Phase 4: Integrated with local RAG memory system.
 All processing is deterministic with no ML models.
 """
 
@@ -24,7 +24,7 @@ from app.logic.auditor import audit_text
 from app.logic.bias_detector import detect_bias
 from app.logic.chain_validator import validate_chain
 from app.logic.source_checker import check_sources
-from app.rag.query import RAGQuery
+from app.rag.query import RAGQuery, query_relevant_documents
 
 
 # Configure module logger
@@ -175,58 +175,56 @@ class VeritasBrain:
         Retrieve relevant memory/context from the RAG system.
 
         Uses key fields such as topic, context, or text to query
-        the memory system for relevant information.
+        the local memory corpus for relevant information.
+
+        Priority for query text extraction:
+        1. payload.get("topic")
+        2. payload.get("text")
+        3. payload.get("context")
+        4. First step from payload.get("steps") or payload.get("chain")
+        5. Fallback to "general"
 
         Args:
             payload: The task payload containing query context.
 
         Returns:
             Dictionary containing:
-            - memory_hits: List of relevant snippets or IDs
+            - memory_hits: List of relevant documents with scores
             - memory_summary: Short summary or empty string
         """
-        self.logger.debug("Retrieving relevant memory")
+        self.logger.debug("Retrieving relevant memory from RAG system")
 
-        # Extract query text from payload
+        # Extract query text from payload (priority order per spec)
         query_text = ""
-        if "text" in payload:
-            query_text = payload["text"][:500]  # Limit query length
-        elif "topic" in payload:
-            query_text = payload["topic"]
-        elif "context" in payload:
-            query_text = payload["context"]
+        if "topic" in payload and payload["topic"]:
+            query_text = str(payload["topic"])[:500]
+        elif "text" in payload and payload["text"]:
+            query_text = str(payload["text"])[:500]
+        elif "context" in payload and payload["context"]:
+            query_text = str(payload["context"])[:500]
         elif "steps" in payload and payload["steps"]:
-            # Use first step as query
-            query_text = payload["steps"][0][:200]
+            query_text = str(payload["steps"][0])[:200]
         elif "chain" in payload and payload["chain"]:
-            query_text = payload["chain"][0][:200]
+            query_text = str(payload["chain"][0])[:200]
+        else:
+            query_text = "general"
 
-        if not query_text:
-            self.logger.info("No query text found for memory retrieval")
-            return {
-                "memory_hits": [],
-                "memory_summary": "",
-            }
+        if not query_text.strip():
+            query_text = "general"
+
+        self.logger.debug(f"Memory query: '{query_text[:50]}...'")
 
         try:
-            # Query the RAG system
-            rag_result = self.memory_client.query(query_text)
+            # Query the RAG system directly
+            rag_result = query_relevant_documents(query_text, top_k=5)
 
-            # Check if RAG is stubbed
-            if rag_result.get("status") == "stub":
-                self.logger.info("RAG system is stubbed, returning empty memory")
-                return {
-                    "memory_hits": [],
-                    "memory_summary": "RAG system not yet implemented",
-                }
+            # Extract hits
+            memory_hits = rag_result.get("hits", [])
 
-            # Extract and format results
-            memory_hits = rag_result.get("results", [])
-            total_matches = rag_result.get("total_matches", 0)
-
-            # Generate summary
+            # Generate summary based on results
             if memory_hits:
-                memory_summary = f"Found {total_matches} relevant memory entries"
+                top_score = memory_hits[0].get("score", 0) if memory_hits else 0
+                memory_summary = f"Found {len(memory_hits)} relevant entries (top score: {top_score:.2f})"
             else:
                 memory_summary = ""
 
@@ -241,7 +239,7 @@ class VeritasBrain:
             self.logger.error(f"Memory retrieval error: {e}")
             return {
                 "memory_hits": [],
-                "memory_summary": f"Memory retrieval failed: {str(e)}",
+                "memory_summary": "",
             }
 
     def run_audit_tools(

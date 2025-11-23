@@ -4,7 +4,7 @@ Veritas API Routes
 This module defines the API endpoints for the Veritas truth auditing service.
 All endpoints return JSON responses.
 
-Phase 3: Integrated with VeritasBrain reasoning engine.
+Phase 4: Integrated with VeritasBrain reasoning engine and RAG memory system.
 """
 
 import logging
@@ -19,6 +19,7 @@ from app.logic.bias_detector import detect_bias
 from app.logic.chain_validator import validate_chain
 from app.logic.source_checker import check_sources
 from app.logic.brain import VeritasBrain, get_brain
+from app.rag.ingest import ingest_documents, clear_corpus, get_corpus_stats
 
 
 logger = logging.getLogger(__name__)
@@ -64,6 +65,18 @@ class CheckSourcesRequest(BaseModel):
     """Request model for source checking."""
     sources: List[str] = Field(..., description="List of source URLs or references to check")
     claims: Optional[List[str]] = Field(default=None, description="Claims to verify against sources")
+
+
+class DocumentModel(BaseModel):
+    """Model for a single document to ingest."""
+    id: str = Field(..., description="Unique document identifier")
+    text: str = Field(..., description="Document text content")
+    tags: Optional[List[str]] = Field(default=None, description="Optional tags for categorization")
+
+
+class IngestDocsRequest(BaseModel):
+    """Request model for document ingestion."""
+    docs: List[DocumentModel] = Field(..., description="List of documents to ingest")
 
 
 # Endpoints
@@ -135,15 +148,15 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.3.0",
-        "phase": 3,
+        "version": "0.4.0",
+        "phase": 4,
         "components": {
             "brain": "active",
             "auditor": "active",
             "bias_detector": "active",
             "chain_validator": "active",
             "source_checker": "active",
-            "rag": "stub",
+            "rag": "active",
         },
     }
 
@@ -337,4 +350,85 @@ async def check_sources_endpoint(request: CheckSourcesRequest) -> Dict[str, Any]
         }
     except Exception as e:
         logger.error(f"Source check error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# RAG Memory Endpoints
+
+@router.post("/ingest_docs", response_class=JSONResponse)
+async def ingest_docs_endpoint(request: IngestDocsRequest) -> Dict[str, Any]:
+    """
+    Ingest documents into Veritas' fact corpus.
+
+    Accepts a list of documents, each with:
+    - id: Unique identifier (required)
+    - text: Document content (required)
+    - tags: Optional list of tags
+
+    Documents are stored in memory/long/veritas_corpus.jsonl.
+    """
+    logger.info(f"Ingesting {len(request.docs)} documents")
+
+    try:
+        # Convert Pydantic models to dicts
+        docs = [
+            {
+                "id": doc.id,
+                "text": doc.text,
+                "tags": doc.tags or [],
+            }
+            for doc in request.docs
+        ]
+
+        result = ingest_documents(docs)
+
+        return {
+            "ok": True,
+            "ingested_count": result["ingested_count"],
+            "errors": result["errors"],
+        }
+    except Exception as e:
+        logger.error(f"Ingestion error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/clear_corpus", response_class=JSONResponse)
+async def clear_corpus_endpoint() -> Dict[str, Any]:
+    """
+    Clear the fact corpus.
+
+    Removes all documents from memory/long/veritas_corpus.jsonl.
+    Use with caution - this is irreversible.
+    """
+    logger.info("Clearing corpus")
+
+    try:
+        result = clear_corpus()
+        return {
+            "ok": result["cleared"],
+            "message": result["message"],
+        }
+    except Exception as e:
+        logger.error(f"Clear corpus error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/corpus_stats", response_class=JSONResponse)
+async def corpus_stats_endpoint() -> Dict[str, Any]:
+    """
+    Get statistics about the fact corpus.
+
+    Returns:
+    - document_count: Number of documents in corpus
+    - file_size_bytes: Size of corpus file
+    - exists: Whether corpus file exists
+    """
+    try:
+        stats = get_corpus_stats()
+        return {
+            "ok": True,
+            **stats,
+        }
+    except Exception as e:
+        logger.error(f"Corpus stats error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

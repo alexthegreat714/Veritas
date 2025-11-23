@@ -2,9 +2,9 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 3
+## Current Status: Phase 4
 
-**Phase 3 implements the VeritasBrain reasoning engine that coordinates all analysis tools.**
+**Phase 4 implements the RAG (Retrieval-Augmented Generation) memory system for context-aware analysis.**
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 
@@ -267,6 +267,128 @@ The `/event` endpoint now processes certain event types through VeritasBrain:
 | `check` | Source checking |
 | Other | Logged only, not processed |
 
+## RAG & Memory System (Phase 4)
+
+The RAG (Retrieval-Augmented Generation) system provides Veritas with memory capabilities, allowing it to store and retrieve relevant context during analysis.
+
+### Storage
+
+Documents are stored in a local JSONL file at:
+```
+memory/long/veritas_corpus.jsonl
+```
+
+Each document is stored as a JSON line with:
+- `id`: Unique identifier (required)
+- `text`: Document content (required)
+- `tags`: Optional categorization tags
+- `embedding`: Pre-computed embedding vector (128 dimensions)
+
+### Document Ingestion
+
+**Via Python:**
+```python
+from app.rag.ingest import ingest_documents, clear_corpus
+
+# Ingest documents
+docs = [
+    {"id": "fact1", "text": "The speed of light is 299,792,458 m/s.", "tags": ["physics"]},
+    {"id": "fact2", "text": "Water freezes at 0 degrees Celsius.", "tags": ["chemistry"]},
+]
+result = ingest_documents(docs)
+# {"ingested_count": 2, "errors": []}
+
+# Clear all documents
+clear_corpus()
+```
+
+**Via API:**
+```bash
+# Ingest documents
+curl -X POST http://localhost:8000/ingest_docs \
+  -H "Content-Type: application/json" \
+  -d '{"docs": [{"id": "doc1", "text": "Document content", "tags": ["tag1"]}]}'
+
+# Clear corpus
+curl -X POST http://localhost:8000/clear_corpus
+
+# Get statistics
+curl http://localhost:8000/corpus_stats
+```
+
+### Memory Retrieval in VeritasBrain
+
+When processing a task, VeritasBrain automatically retrieves relevant memory context:
+
+1. **Query Construction** - Extracts search text from payload (topic > text > context > steps)
+2. **Embedding** - Creates deterministic embedding using hashed bag-of-words
+3. **Similarity Search** - Computes cosine similarity against all corpus documents
+4. **Context Assembly** - Returns top-k most relevant documents
+
+The memory context is included in all analysis results:
+```json
+{
+  "details": {
+    "memory_context": {
+      "memory_hits": [
+        {"id": "fact1", "text": "...", "score": 0.85, "tags": ["physics"]}
+      ],
+      "memory_summary": "Found 1 relevant entries in memory"
+    }
+  }
+}
+```
+
+### Embedding System
+
+The embedding system is entirely deterministic and rule-based:
+
+- **Tokenization**: Lowercase, split on non-alphanumeric characters
+- **Hashing**: Polynomial rolling hash maps tokens to 128-dimension vector
+- **Weighting**: TF-like log-scaled token counts
+- **Normalization**: L2 normalized for cosine similarity
+
+```python
+from app.rag.query import embed_text, cosine_similarity
+
+# Create embeddings
+emb1 = embed_text("machine learning algorithms")
+emb2 = embed_text("artificial intelligence systems")
+
+# Compute similarity
+similarity = cosine_similarity(emb1, emb2)
+```
+
+### RAGQuery Class
+
+For advanced querying:
+
+```python
+from app.rag.query import RAGQuery
+
+rag = RAGQuery({"top_k": 10, "similarity_threshold": 0.3})
+
+# Basic query
+result = rag.query("climate change effects")
+
+# Query with tag filters
+result = rag.query_with_filter("physics", filters={"tags": ["science"]})
+
+# Hybrid keyword + semantic search
+result = rag.hybrid_search("quantum mechanics", keyword_weight=0.5)
+
+# Get context optimized for token limits
+result = rag.get_context("summarize findings", max_tokens=4000)
+```
+
+### Current Limitations
+
+- **Simple embeddings**: Uses hashed bag-of-words, not semantic ML embeddings
+- **No external knowledge**: Only searches ingested corpus, no web access
+- **File-based storage**: JSONL file, not a vector database
+- **In-memory processing**: Entire corpus loaded for each query
+- **No persistence across restarts**: Corpus file must be re-ingested if deleted
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -279,6 +401,9 @@ The `/event` endpoint now processes certain event types through VeritasBrain:
 | `/detect_bias` | POST | Detect bias in text |
 | `/validate_chain` | POST | Validate reasoning chain |
 | `/check_sources` | POST | Check source credibility |
+| `/ingest_docs` | POST | Ingest documents into corpus |
+| `/clear_corpus` | POST | Clear all documents from corpus |
+| `/corpus_stats` | GET | Get corpus statistics |
 
 ## Installation
 
@@ -318,21 +443,27 @@ veritas/
 ├── app/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py            # Configuration
-│   ├── routes/veritas.py    # API endpoints (Phase 3: Brain integration)
+│   ├── routes/veritas.py    # API endpoints (Phase 4: RAG integration)
 │   ├── logic/
 │   │   ├── brain.py         # VeritasBrain reasoning engine (Phase 3)
 │   │   ├── auditor.py       # Logic auditing (Phase 2)
 │   │   ├── bias_detector.py # Bias detection (Phase 2)
 │   │   ├── chain_validator.py # Chain validation (Phase 2)
 │   │   └── source_checker.py  # Source verification (Phase 2)
-│   ├── rag/                 # RAG system (stub)
+│   ├── rag/
+│   │   ├── ingest.py        # Document ingestion (Phase 4)
+│   │   └── query.py         # Embedding & similarity search (Phase 4)
 │   ├── tools/               # Tool registry (stub)
-│   ├── memory/              # Memory storage
 │   └── logs/
 │       ├── veritas_brain.log        # Brain operations
-│       └── veritas_contributions.log # Analysis audit trail
+│       ├── veritas_contributions.log # Analysis audit trail
+│       └── rag_query.log            # RAG query logs
+├── memory/
+│   └── long/
+│       └── veritas_corpus.jsonl  # Document corpus storage
 ├── tests/
 │   ├── test_brain.py        # Brain unit tests (Phase 3)
+│   ├── test_rag.py          # RAG system tests (Phase 4)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -370,13 +501,14 @@ Veritas is:
 - Contribution logging and audit trail
 - Event processing integration
 
-### Phase 4 (Planned)
+### Phase 4 (Complete)
 
 - RAG system implementation
-- Embedding generation
-- Vector store integration
-- Semantic search functionality
-- Memory-augmented analysis
+- Deterministic embedding generation (hashed bag-of-words)
+- JSONL-based document corpus storage
+- Cosine similarity search functionality
+- Memory-augmented analysis in VeritasBrain
+- Document ingestion API endpoints
 
 ### Phase 5 (Planned)
 
@@ -394,4 +526,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 3 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only.
+Phase 4 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search.
