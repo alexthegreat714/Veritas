@@ -4,8 +4,8 @@ Veritas API Routes
 This module defines the API endpoints for the Veritas truth auditing service.
 All endpoints return JSON responses.
 
-Phase 5: Standardized event API for inter-agent communication.
-Integrated with VeritasBrain reasoning engine and RAG memory system.
+Phase 6: Legislative functions for Congress interaction.
+Integrated with VeritasBrain reasoning engine, RAG memory, and Event API.
 """
 
 import logging
@@ -20,6 +20,12 @@ from app.logic.bias_detector import detect_bias
 from app.logic.chain_validator import validate_chain
 from app.logic.source_checker import check_sources
 from app.logic.brain import VeritasBrain, get_brain
+from app.logic.legislative import (
+    vote_on_bill,
+    adversarial_contribution,
+    contribution_log,
+    get_legislative_handler,
+)
 from app.rag.ingest import ingest_documents, clear_corpus, get_corpus_stats
 
 
@@ -117,6 +123,22 @@ class IngestDocsRequest(BaseModel):
     docs: List[DocumentModel] = Field(..., description="List of documents to ingest")
 
 
+# ============================================================================
+# Legislative Request Models (Phase 6)
+# ============================================================================
+
+class VoteOnBillRequest(BaseModel):
+    """Request model for bill voting."""
+    bill_text: str = Field(..., description="Full text of the bill to vote on")
+    bill_id: Optional[str] = Field(default=None, description="Optional bill identifier")
+
+
+class AdversarialContributionRequest(BaseModel):
+    """Request model for adversarial contribution."""
+    bill_text: str = Field(..., description="Full text of the bill to analyze")
+    bill_id: Optional[str] = Field(default=None, description="Optional bill identifier")
+
+
 # Endpoints
 
 @router.post("/run_task", response_class=JSONResponse)
@@ -186,8 +208,8 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.5.0",
-        "phase": 5,
+        "version": "0.6.0",
+        "phase": 6,
         "components": {
             "brain": "active",
             "auditor": "active",
@@ -196,6 +218,7 @@ async def get_status() -> Dict[str, Any]:
             "source_checker": "active",
             "rag": "active",
             "event_api": "active",
+            "legislative": "active",
         },
     }
 
@@ -520,4 +543,95 @@ async def corpus_stats_endpoint() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Corpus stats error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# Legislative Endpoints (Phase 6)
+# ============================================================================
+
+@router.post("/vote_on_bill", response_class=JSONResponse)
+async def vote_on_bill_endpoint(request: VoteOnBillRequest) -> Dict[str, Any]:
+    """
+    Vote on a bill based on logic integrity analysis (Phase 6).
+
+    Veritas votes based STRICTLY on:
+    - Logical consistency
+    - Presence of contradictions
+    - Fallacy detection
+    - Bias levels
+    - Clarity and structure
+
+    Veritas does NOT evaluate:
+    - Policy merit
+    - Cost or budget implications
+    - Moral considerations
+    - Political alignment
+
+    Returns vote ("yes", "no", or "abstain") with confidence and reasons.
+    Automatically logs the contribution.
+    """
+    logger.info(f"Vote request for bill: {request.bill_id or 'unknown'}")
+
+    try:
+        handler = get_legislative_handler()
+        result = handler.vote(
+            bill_text=request.bill_text,
+            bill_id=request.bill_id,
+            log_contribution=True
+        )
+
+        return {
+            "ok": True,
+            "bill_id": request.bill_id,
+            "vote": result["vote"],
+            "confidence": result["confidence"],
+            "reasons": result["reasons"],
+            "analysis_summary": result["analysis_summary"],
+        }
+    except Exception as e:
+        logger.error(f"Vote error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/adversarial_contribution", response_class=JSONResponse)
+async def adversarial_contribution_endpoint(
+    request: AdversarialContributionRequest
+) -> Dict[str, Any]:
+    """
+    Generate adversarial (devil's advocate) contribution for a bill (Phase 6).
+
+    Purpose: Surface potential issues that may be missed during groupthink.
+    This is NOT a vote - it's a structured critique to ensure thorough review.
+
+    Identifies:
+    - Edge-case flaws
+    - Hidden assumptions
+    - Potential fallacies
+    - Alternate interpretations
+    - Structural weaknesses
+
+    Returns counterpoints, risk flags, and whether review is required.
+    Automatically logs the contribution.
+    """
+    logger.info(f"Adversarial contribution request for bill: {request.bill_id or 'unknown'}")
+
+    try:
+        handler = get_legislative_handler()
+        result = handler.adversarial(
+            bill_text=request.bill_text,
+            bill_id=request.bill_id,
+            log_contribution=True
+        )
+
+        return {
+            "ok": True,
+            "bill_id": request.bill_id,
+            "counterpoints": result["counterpoints"],
+            "risk_flags": result["risk_flags"],
+            "requires_review": result["requires_review"],
+            "hidden_assumptions": result["hidden_assumptions"],
+        }
+    except Exception as e:
+        logger.error(f"Adversarial contribution error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

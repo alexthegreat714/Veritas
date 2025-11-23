@@ -8,8 +8,9 @@ This module contains the VeritasBrain class that coordinates:
 - Structured output synthesis
 - Contribution logging
 - Event handling (Phase 5)
+- Legislative functions (Phase 6)
 
-Phase 5: Standardized event API for inter-agent communication.
+Phase 6: Legislative functions for Congress interaction.
 All processing is deterministic with no ML models.
 """
 
@@ -129,6 +130,8 @@ class VeritasBrain:
         Classify the task type based on the payload structure.
 
         Uses simple heuristic rules based on keys present:
+        - If mode="vote" with bill_text -> "vote_on_bill"
+        - If mode="adversarial" with bill_text -> "adversarial_contribution"
         - If text and no steps/sources -> "audit_text"
         - If steps list present -> "validate_chain"
         - If sources list present -> "check_sources"
@@ -139,9 +142,24 @@ class VeritasBrain:
 
         Returns:
             String task type: "audit_text", "validate_chain",
-            "check_sources", or "composite_audit".
+            "check_sources", "composite_audit", "vote_on_bill",
+            or "adversarial_contribution".
         """
         self.logger.debug(f"Classifying task with keys: {list(payload.keys())}")
+
+        # Check for legislative modes (Phase 6)
+        mode = payload.get("mode", "")
+        has_bill_text = "bill_text" in payload and bool(payload["bill_text"])
+
+        if has_bill_text:
+            if mode == "vote":
+                task_type = "vote_on_bill"
+                self.logger.info(f"Task classified as: {task_type}")
+                return task_type
+            elif mode == "adversarial":
+                task_type = "adversarial_contribution"
+                self.logger.info(f"Task classified as: {task_type}")
+                return task_type
 
         has_text = "text" in payload and bool(payload["text"])
         has_steps = "steps" in payload and isinstance(payload.get("steps"), list) and len(payload["steps"]) > 0
@@ -275,6 +293,7 @@ class VeritasBrain:
             "bias": None,
             "chain": None,
             "sources": None,
+            "legislative": None,  # Phase 6: Legislative results
         }
 
         try:
@@ -306,6 +325,20 @@ class VeritasBrain:
                 if "sources" in payload:
                     sources = payload["sources"]
                     results["sources"] = check_sources(sources)
+
+            elif task_type == "vote_on_bill":
+                # Phase 6: Legislative voting
+                from app.logic.legislative import vote_on_bill
+                bill_text = payload.get("bill_text", "")
+                bill_id = payload.get("bill_id")
+                results["legislative"] = vote_on_bill(bill_text, bill_id)
+
+            elif task_type == "adversarial_contribution":
+                # Phase 6: Adversarial contribution
+                from app.logic.legislative import adversarial_contribution
+                bill_text = payload.get("bill_text", "")
+                bill_id = payload.get("bill_id")
+                results["legislative"] = adversarial_contribution(bill_text, bill_id)
 
             self.logger.debug(f"Tool results keys populated: {[k for k, v in results.items() if v]}")
 
@@ -423,6 +456,7 @@ class VeritasBrain:
                 "bias": tool_results.get("bias"),
                 "chain": tool_results.get("chain"),
                 "sources": tool_results.get("sources"),
+                "legislative": tool_results.get("legislative"),  # Phase 6
                 "memory_context": memory_data,
             },
         }
@@ -570,7 +604,7 @@ class VeritasBrain:
         return result
 
     # ========================================================================
-    # Event Handling (Phase 5) - Inter-agent communication
+    # Event Handling (Phase 5/6) - Inter-agent communication
     # ========================================================================
 
     # Mapping from event_type to internal task_type
@@ -580,6 +614,9 @@ class VeritasBrain:
         "argument-integrity-check": "validate_chain",
         "source-integrity-check": "check_sources",
         "composite-audit": "composite_audit",
+        # Phase 6: Legislative event types
+        "bill-vote-request": "vote_on_bill",
+        "bill-adversarial-request": "adversarial_contribution",
     }
 
     # Valid event types
@@ -613,6 +650,12 @@ class VeritasBrain:
         - "composite-audit": Combined analysis of multiple data types
             - Uses any combination of text, steps, sources
             - Sky uses this for complex cases
+        - "bill-vote-request": Vote on a bill (Phase 6)
+            - Uses payload.bill_text
+            - Congress uses this for legislative votes
+        - "bill-adversarial-request": Adversarial contribution (Phase 6)
+            - Uses payload.bill_text
+            - Congress uses this for devil's advocate analysis
 
         Args:
             event_type: The event type string from VeritasEvent.
@@ -677,6 +720,8 @@ class VeritasBrain:
         - bill-logic-check: Maps bill_text -> text
         - argument-integrity-check: Ensures steps is a list
         - source-integrity-check: Ensures sources is a list
+        - bill-vote-request: Sets mode to "vote" (Phase 6)
+        - bill-adversarial-request: Sets mode to "adversarial" (Phase 6)
 
         Args:
             event_type: The event type.
@@ -701,6 +746,14 @@ class VeritasBrain:
             # Ensure sources is a list
             if "sources" not in normalized:
                 normalized["sources"] = []
+
+        elif event_type == "bill-vote-request":
+            # Phase 6: Set mode for legislative voting
+            normalized["mode"] = "vote"
+
+        elif event_type == "bill-adversarial-request":
+            # Phase 6: Set mode for adversarial contribution
+            normalized["mode"] = "adversarial"
 
         return normalized
 

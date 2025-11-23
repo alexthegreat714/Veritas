@@ -2,13 +2,14 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 5
+## Current Status: Phase 6
 
-**Phase 5 implements the standardized Event API for inter-agent communication.**
+**Phase 6 implements legislative functions for Congress interaction.**
 
-Sky, Congress, and other agents can now request analysis from Veritas using structured event types.
+Veritas can now vote on bills, provide adversarial contributions, and participate in Senate legislative processes.
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
+Veritas adjudicates **logic, not policy**. It does not evaluate morality, cost, or political alignment.
 
 ## Core Tools
 
@@ -546,11 +547,120 @@ Unknown event types return `ok: false`:
 | Agent | Primary Event Types |
 |-------|---------------------|
 | **Sky** | `audit-request`, `composite-audit` |
-| **Congress** | `bill-logic-check` |
-| **Bill Engine** | `bill-logic-check` |
+| **Congress** | `bill-logic-check`, `bill-vote-request`, `bill-adversarial-request` |
+| **Bill Engine** | `bill-logic-check`, `bill-vote-request` |
 | **Apollo** | `argument-integrity-check` |
 | **Mercury** | `argument-integrity-check`, `source-integrity-check` |
 | **Aero** | `argument-integrity-check` |
+
+## Legislative Functions (Phase 6)
+
+Veritas participates in Senate legislative processes through voting and adversarial contributions.
+
+**Key Principle:** Veritas adjudicates **logic, not policy**. It does not evaluate:
+- Moral considerations
+- Cost or budget implications
+- Political alignment
+- Social desirability
+
+### Bill Voting (`/vote_on_bill`)
+
+Veritas votes on bills based strictly on:
+- Logical consistency
+- Presence of contradictions
+- Fallacy detection
+- Bias levels
+- Clarity and structure
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/vote_on_bill \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bill_text": "All citizens shall have equal rights under the law.",
+    "bill_id": "EQUALITY-ACT-2024"
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "bill_id": "EQUALITY-ACT-2024",
+  "vote": "yes",
+  "confidence": 0.85,
+  "reasons": ["No significant logical issues detected", "Structure is coherent"],
+  "analysis_summary": "No significant issues found"
+}
+```
+
+**Vote Values:**
+| Vote | Condition |
+|------|-----------|
+| `yes` | Minimal or no logical issues |
+| `no` | Contradictions, high bias, multiple fallacies |
+| `abstain` | Text too short, unclear, or insufficient evidence |
+
+### Adversarial Contribution (`/adversarial_contribution`)
+
+When Congress risks groupthink, Veritas surfaces:
+- Edge-case flaws
+- Hidden assumptions
+- Potential fallacies
+- Alternate interpretations
+
+This is NOT a vote - it's a devil's advocate contribution.
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/adversarial_contribution \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bill_text": "All schools must implement new curriculum standards.",
+    "bill_id": "EDU-REFORM-2024"
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "bill_id": "EDU-REFORM-2024",
+  "counterpoints": [
+    {
+      "type": "structural",
+      "issue": "Universal mandate may not account for regional differences",
+      "severity": "medium"
+    }
+  ],
+  "risk_flags": [],
+  "requires_review": false,
+  "hidden_assumptions": ["Assumes uniform educational infrastructure"]
+}
+```
+
+### Event-Based Legislative Requests
+
+Congress can also use the `/event` endpoint:
+
+**Vote Request:**
+```json
+{
+  "event_type": "bill-vote-request",
+  "source": "congress",
+  "payload": {"bill_text": "..."},
+  "correlation_id": "session-123"
+}
+```
+
+**Adversarial Request:**
+```json
+{
+  "event_type": "bill-adversarial-request",
+  "source": "congress",
+  "payload": {"bill_text": "..."}
+}
+```
 
 ## API Endpoints
 
@@ -559,12 +669,14 @@ Unknown event types return `ok: false`:
 | `/` | GET | Service information |
 | `/health` | GET | Health check |
 | `/status` | GET | Component status |
-| `/event` | POST | **Event API** - Inter-agent communication (Phase 5) |
+| `/event` | POST | **Event API** - Inter-agent communication |
 | `/run_task` | POST | Execute a task by type |
 | `/audit_text` | POST | Audit text for logic issues |
 | `/detect_bias` | POST | Detect bias in text |
 | `/validate_chain` | POST | Validate reasoning chain |
 | `/check_sources` | POST | Check source credibility |
+| `/vote_on_bill` | POST | **Legislative** - Vote on a bill (Phase 6) |
+| `/adversarial_contribution` | POST | **Legislative** - Devil's advocate analysis (Phase 6) |
 | `/ingest_docs` | POST | Ingest documents into corpus |
 | `/clear_corpus` | POST | Clear all documents from corpus |
 | `/corpus_stats` | GET | Get corpus statistics |
@@ -608,9 +720,10 @@ veritas/
 ├── app/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py            # Configuration
-│   ├── routes/veritas.py    # API endpoints (Phase 5: Event API)
+│   ├── routes/veritas.py    # API endpoints (Phase 6: Legislative)
 │   ├── logic/
-│   │   ├── brain.py         # VeritasBrain + handle_event (Phase 5)
+│   │   ├── brain.py         # VeritasBrain + handle_event (Phase 5/6)
+│   │   ├── legislative.py   # Legislative functions (Phase 6)
 │   │   ├── auditor.py       # Logic auditing (Phase 2)
 │   │   ├── bias_detector.py # Bias detection (Phase 2)
 │   │   ├── chain_validator.py # Chain validation (Phase 2)
@@ -622,6 +735,8 @@ veritas/
 │   └── logs/
 │       ├── veritas_brain.log        # Brain operations
 │       ├── veritas_contributions.log # Analysis audit trail
+│       ├── veritas_legislative.log  # Legislative operations
+│       ├── veritas_legislative_contributions.log # Legislative audit trail
 │       └── rag_query.log            # RAG query logs
 ├── memory/
 │   └── long/
@@ -630,6 +745,7 @@ veritas/
 │   ├── test_brain.py        # Brain unit tests (Phase 3)
 │   ├── test_rag.py          # RAG system tests (Phase 4)
 │   ├── test_events.py       # Event API tests (Phase 5)
+│   ├── test_legislative.py  # Legislative tests (Phase 6)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -685,14 +801,24 @@ Veritas is:
 - Agent conventions for Sky, Congress, Apollo, Mercury, Aero
 - Correlation ID support for request tracing
 
-### Phase 6 (Planned)
+### Phase 6 (Complete)
+
+- Legislative functions for Congress interaction
+- `vote_on_bill()` for deterministic bill voting
+- `adversarial_contribution()` for devil's advocate analysis
+- `/vote_on_bill` and `/adversarial_contribution` endpoints
+- `bill-vote-request` and `bill-adversarial-request` event types
+- Contribution logging for legislative audit trail
+- LegislativeHandler class for OOP interface
+
+### Phase 7 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 7 (Planned)
+### Phase 8 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -701,4 +827,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 5 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search.
+Phase 6 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope.

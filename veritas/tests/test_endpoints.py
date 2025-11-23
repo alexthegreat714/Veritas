@@ -2,7 +2,7 @@
 Veritas API Endpoint Tests
 
 This module tests all API endpoints for proper response codes and JSON structure.
-Phase 5: Tests for VeritasBrain integration and Event API.
+Phase 6: Tests for VeritasBrain integration, Event API, and Legislative functions.
 """
 
 import pytest
@@ -46,7 +46,8 @@ class TestVeritasEndpoints:
         assert data["components"]["bias_detector"] == "active"
         assert data["components"]["rag"] == "active"
         assert data["components"]["event_api"] == "active"
-        assert data["phase"] == 5
+        assert data["components"]["legislative"] == "active"
+        assert data["phase"] == 6
 
     def test_run_task_audit(self, client):
         """Test the run_task endpoint with audit_text task."""
