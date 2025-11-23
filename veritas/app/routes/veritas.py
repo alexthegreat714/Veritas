@@ -27,6 +27,8 @@ from app.logic.legislative import (
     get_legislative_handler,
 )
 from app.rag.ingest import ingest_documents, clear_corpus, get_corpus_stats
+from app.tools import tool_review_bill, tool_review_statement, registry as tool_registry
+from app.schemas import EventResponse, ErrorResponse
 
 
 logger = logging.getLogger(__name__)
@@ -208,8 +210,8 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.6.0",
-        "phase": 6,
+        "version": "0.7.0",
+        "phase": 7,
         "components": {
             "brain": "active",
             "auditor": "active",
@@ -219,7 +221,10 @@ async def get_status() -> Dict[str, Any]:
             "rag": "active",
             "event_api": "active",
             "legislative": "active",
+            "congress_integration": "active",
+            "structured_output": "active",
         },
+        "tools": tool_registry.list_tools(),
     }
 
 
@@ -295,6 +300,86 @@ async def handle_event(event: VeritasEvent) -> VeritasResponse:
                 "error": str(e),
                 "error_type": "processing_error",
             },
+        )
+
+
+# ============================================================================
+# Congress Event Types (Phase 4)
+# ============================================================================
+
+# Supported Congress event types
+CONGRESS_EVENT_TYPES = {
+    "bill_for_review": tool_review_bill,
+    "statement_for_audit": tool_review_statement,
+    "dispute_for_analysis": None,  # Stub for Phase 5
+}
+
+
+class CongressEventRequest(BaseModel):
+    """Request model for Congress events."""
+    event_type: str = Field(..., description="Type of event: bill_for_review | statement_for_audit | dispute_for_analysis")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Event payload")
+
+
+@router.post("/event/congress", response_class=JSONResponse)
+async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]:
+    """
+    Handle structured events from Congress (Phase 4).
+
+    Supported event_type values:
+    - "bill_for_review": Review a bill for logical consistency
+    - "statement_for_audit": Audit a statement for truth/bias
+    - "dispute_for_analysis": Analyze a dispute (stub for Phase 5)
+
+    Expected payload patterns:
+    - bill_for_review: {"bill_id": str, "text": str}
+    - statement_for_audit: {"statement_id": str, "text": str}
+
+    Returns CongressReviewResult for bill/statement reviews.
+    """
+    logger.info(f"Congress event received: {request.event_type}")
+
+    # Validate event type
+    if request.event_type not in CONGRESS_EVENT_TYPES:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "ok": False,
+                "error": f"Unknown event_type '{request.event_type}'",
+                "supported_types": list(CONGRESS_EVENT_TYPES.keys()),
+            }
+        )
+
+    # Handle dispatch for analysis (stub)
+    if request.event_type == "dispute_for_analysis":
+        return {
+            "ok": True,
+            "event_type": request.event_type,
+            "result": {
+                "status": "stub",
+                "message": "Dispute analysis will be implemented in Phase 5",
+            }
+        }
+
+    # Get the appropriate tool
+    tool = CONGRESS_EVENT_TYPES[request.event_type]
+
+    try:
+        result = tool(request.payload)
+        return {
+            "ok": True,
+            "event_type": request.event_type,
+            "result": result,
+        }
+    except Exception as e:
+        logger.error(f"Congress event error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={
+                "ok": False,
+                "event_type": request.event_type,
+                "error": str(e),
+            }
         )
 
 

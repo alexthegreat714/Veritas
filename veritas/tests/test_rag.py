@@ -466,5 +466,5 @@ class TestEndpointIntegration:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["phase"] == 6
+        assert data["phase"] == 7
         assert data["components"]["rag"] == "active"

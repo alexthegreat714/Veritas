@@ -47,7 +47,7 @@ class TestVeritasEndpoints:
         assert data["components"]["rag"] == "active"
         assert data["components"]["event_api"] == "active"
         assert data["components"]["legislative"] == "active"
-        assert data["phase"] == 6
+        assert data["phase"] == 7
 
     def test_run_task_audit(self, client):
         """Test the run_task endpoint with audit_text task."""

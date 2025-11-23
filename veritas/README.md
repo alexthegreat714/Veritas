@@ -2,11 +2,17 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 6
+## Current Status: Phase 7
 
-**Phase 6 implements legislative functions for Congress interaction.**
+**Phase 7 implements Standardized Output Schema and Congress Integration.**
 
-Veritas can now vote on bills, provide adversarial contributions, and participate in Senate legislative processes.
+Veritas now:
+- Returns structured schema-based audits (Pydantic models)
+- Exposes `review_bill` and `review_statement` tools
+- Handles `/event/congress` calls for bill and statement review
+- Provides advisory recommendations for Congress
+
+Veritas can also vote on bills, provide adversarial contributions, and participate in Senate legislative processes (Phase 6).
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 Veritas adjudicates **logic, not policy**. It does not evaluate morality, cost, or political alignment.
@@ -662,6 +668,104 @@ Congress can also use the `/event` endpoint:
 }
 ```
 
+## Congress Integration (Phase 7)
+
+The `/event/congress` endpoint provides structured event handling for Congress with schema-based responses.
+
+**Important:** Veritas is an auditor. Recommendations are **advisory only**. They do not constitute a vote, law change, or override of any other agent.
+
+### Supported Congress Event Types
+
+| Event Type | Description | Payload Fields |
+|------------|-------------|----------------|
+| `bill_for_review` | Review a bill for logical issues | `bill_id`, `text`, `sources` (optional) |
+| `statement_for_audit` | Audit a statement for truth/bias | `statement_id`, `text`, `sources` (optional) |
+| `dispute_for_analysis` | Analyze a dispute (stub) | `dispute_id`, `parties`, `claims` |
+
+### Bill Review Example
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event/congress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "bill_for_review",
+    "payload": {
+      "bill_id": "BILL-2024-001",
+      "text": "All citizens shall have equal rights under the law."
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "event_type": "bill_for_review",
+  "result": {
+    "item_type": "bill",
+    "id": "BILL-2024-001",
+    "audit": {
+      "audit": {
+        "original_text": "...",
+        "normalized": {"claims": [...], "word_count": 9},
+        "logical_issues": [],
+        "bias_flags": [],
+        "confidence": "high"
+      },
+      "retrieved_docs": [],
+      "source_validation": []
+    },
+    "recommendation": "approve",
+    "notes": "ADVISORY: Analysis found no significant issues. High confidence in analysis"
+  }
+}
+```
+
+### Recommendation Values
+
+| Recommendation | Condition |
+|----------------|-----------|
+| `approve` | High confidence, no significant issues |
+| `revise` | Some issues detected that should be addressed |
+| `reject` | Severe logical issues or major contradictions |
+
+### Unknown Event Type Error
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event/congress \
+  -H "Content-Type: application/json" \
+  -d '{"event_type": "unknown", "payload": {}}'
+```
+
+**Response (400):**
+```json
+{
+  "ok": false,
+  "error": "Unknown event_type 'unknown'",
+  "supported_types": ["bill_for_review", "statement_for_audit", "dispute_for_analysis"]
+}
+```
+
+### Tool Registry
+
+Veritas tools can be invoked programmatically:
+
+```python
+from app.tools import registry, TOOLS
+
+# List available tools
+tools = registry.list_tools()
+# ['review_bill', 'review_statement', 'audit_text', 'audit_with_sources']
+
+# Invoke a tool
+result = registry.invoke("review_bill", {
+    "bill_id": "TEST-001",
+    "text": "Policy document text..."
+})
+```
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -670,6 +774,7 @@ Congress can also use the `/event` endpoint:
 | `/health` | GET | Health check |
 | `/status` | GET | Component status |
 | `/event` | POST | **Event API** - Inter-agent communication |
+| `/event/congress` | POST | **Congress API** - Bill/statement review (Phase 7) |
 | `/run_task` | POST | Execute a task by type |
 | `/audit_text` | POST | Audit text for logic issues |
 | `/detect_bias` | POST | Detect bias in text |
@@ -720,9 +825,10 @@ veritas/
 ├── app/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py            # Configuration
-│   ├── routes/veritas.py    # API endpoints (Phase 6: Legislative)
+│   ├── schemas.py           # Pydantic models for structured output (Phase 7)
+│   ├── routes/veritas.py    # API endpoints (Phase 7: Congress Integration)
 │   ├── logic/
-│   │   ├── brain.py         # VeritasBrain + handle_event (Phase 5/6)
+│   │   ├── brain.py         # VeritasBrain + handle_event + convenience functions
 │   │   ├── legislative.py   # Legislative functions (Phase 6)
 │   │   ├── auditor.py       # Logic auditing (Phase 2)
 │   │   ├── bias_detector.py # Bias detection (Phase 2)
@@ -731,7 +837,8 @@ veritas/
 │   ├── rag/
 │   │   ├── ingest.py        # Document ingestion (Phase 4)
 │   │   └── query.py         # Embedding & similarity search (Phase 4)
-│   ├── tools/               # Tool registry (stub)
+│   ├── tools/
+│   │   └── __init__.py      # Tool registry + Congress review tools (Phase 7)
 │   └── logs/
 │       ├── veritas_brain.log        # Brain operations
 │       ├── veritas_contributions.log # Analysis audit trail
@@ -743,9 +850,12 @@ veritas/
 │       └── veritas_corpus.jsonl  # Document corpus storage
 ├── tests/
 │   ├── test_brain.py        # Brain unit tests (Phase 3)
+│   ├── test_phase3_functions.py # Phase 3 convenience function tests
 │   ├── test_rag.py          # RAG system tests (Phase 4)
 │   ├── test_events.py       # Event API tests (Phase 5)
 │   ├── test_legislative.py  # Legislative tests (Phase 6)
+│   ├── test_congress_review_tools.py # Congress tool tests (Phase 7)
+│   ├── test_event_handlers.py # Congress event handler tests (Phase 7)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -811,14 +921,30 @@ Veritas is:
 - Contribution logging for legislative audit trail
 - LegislativeHandler class for OOP interface
 
-### Phase 7 (Planned)
+### Phase 7 (Complete)
+
+- Standardized Output Schema (Pydantic models)
+  - `AuditResult`: Core audit with logical issues, bias flags, confidence
+  - `AuditWithSourcesResult`: Extended audit with RAG and source validation
+  - `CongressReviewResult`: Full review result with recommendation
+- Congress-facing review tools
+  - `tool_review_bill()`: Bill review with advisory recommendation
+  - `tool_review_statement()`: Statement review with advisory recommendation
+- `/event/congress` endpoint for Congress event handling
+  - `bill_for_review`: Review a bill
+  - `statement_for_audit`: Audit a statement
+  - `dispute_for_analysis`: Analyze a dispute (stub)
+- Constitutional boundary checks (advisory only disclaimers)
+- Tool registry with `review_bill`, `review_statement`, `audit_text`, `audit_with_sources`
+
+### Phase 8 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 8 (Planned)
+### Phase 9 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -827,4 +953,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 6 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope.
+Phase 7 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent.
