@@ -2,17 +2,25 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 7
+## Current Status: Phase 8
 
-**Phase 7 implements Standardized Output Schema and Congress Integration.**
+**Phase 8 implements Dispute Resolution Hooks (Non-Judicial).**
 
 Veritas now:
-- Returns structured schema-based audits (Pydantic models)
-- Exposes `review_bill` and `review_statement` tools
-- Handles `/event/congress` calls for bill and statement review
-- Provides advisory recommendations for Congress
+- Parses and classifies disputes between agents
+- Identifies factual vs. interpretation disagreements
+- Recommends escalation targets (Sophia/Aegis/Congress)
+- Stores dispute analyses for audit trails
 
-Veritas can also vote on bills, provide adversarial contributions, and participate in Senate legislative processes (Phase 6).
+**Important:** Veritas does NOT:
+- Rule on ethics or law (that's Sophia's domain)
+- Rule on security or danger (that's Aegis's domain)
+- Override Congress, Sky, or any agent
+- Actually escalate or forward events
+
+Veritas only classifies what kind of disagreement it is, provides fact-logic analysis, and identifies whether external escalation is required. Actual escalation is handled by Sky/n8n.
+
+Previous phases include: structured schema audits, Congress review tools, legislative functions, Event API, and RAG memory.
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 Veritas adjudicates **logic, not policy**. It does not evaluate morality, cost, or political alignment.
@@ -757,7 +765,7 @@ from app.tools import registry, TOOLS
 
 # List available tools
 tools = registry.list_tools()
-# ['review_bill', 'review_statement', 'audit_text', 'audit_with_sources']
+# ['review_bill', 'review_statement', 'audit_text', 'audit_with_sources', 'parse_dispute']
 
 # Invoke a tool
 result = registry.invoke("review_bill", {
@@ -765,6 +773,91 @@ result = registry.invoke("review_bill", {
     "text": "Policy document text..."
 })
 ```
+
+## Dispute Resolution (Phase 8)
+
+The dispute engine processes disagreements between agents and classifies dispute types.
+
+**Important:** Veritas does NOT:
+- Rule on ethics or law (Sophia's domain)
+- Rule on security or danger (Aegis's domain)
+- Override Congress, Sky, or any agent
+- Actually escalate or forward events
+
+Veritas only classifies and reports. Actual escalation is handled by Sky/n8n.
+
+### `parse_dispute` Tool
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event/congress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "dispute_for_analysis",
+    "payload": {
+      "agent_A": {
+        "agent": "Sky",
+        "text": "The proposal is valid and should be approved.",
+        "metadata": {}
+      },
+      "agent_B": {
+        "agent": "Aegis",
+        "text": "The proposal has security concerns that need addressing.",
+        "metadata": {}
+      }
+    }
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "event_type": "dispute_for_analysis",
+  "result": {
+    "agents": ["Sky", "Aegis"],
+    "issues": {
+      "factual_disagreement": false,
+      "interpretation_disagreement": true,
+      "missing_data": false,
+      "logical_issues_A": [],
+      "logical_issues_B": [],
+      "contradictions": []
+    },
+    "needs_escalation": "aegis",
+    "recommendation": "forward_to_aegis",
+    "analysis": {...},
+    "storage": {"stored": true, "dispute_id": "..."}
+  }
+}
+```
+
+### Escalation Categories
+
+| Target | Triggered By | Example Keywords |
+|--------|--------------|------------------|
+| `sophia` | Ethical/legal ambiguity | ethics, rights, justice, law, discrimination |
+| `aegis` | Security/safety implications | security, threat, vulnerability, danger |
+| `congress` | Political/governance impact | policy, budget, legislation, authority |
+| `none` | No special domain detected | General factual disputes |
+
+### Recommendation Values
+
+| Recommendation | Condition |
+|----------------|-----------|
+| `forward_to_sophia` | Escalation to Sophia needed |
+| `forward_to_aegis` | Escalation to Aegis needed |
+| `mediation_by_congress` | Escalation to Congress needed |
+| `request_more_data` | Missing data or context |
+| `minimal_issue_detected` | Clear logical winner |
+| `inconclusive` | Both sides have significant issues |
+
+### Dispute Storage
+
+Disputes are stored in `app/memory/long_term/disputes/` for audit trails:
+- One JSON file per dispute
+- Includes timestamp, agent names, analysis, recommendation
+- Can be queried for historical analysis
 
 ## API Endpoints
 
@@ -774,7 +867,7 @@ result = registry.invoke("review_bill", {
 | `/health` | GET | Health check |
 | `/status` | GET | Component status |
 | `/event` | POST | **Event API** - Inter-agent communication |
-| `/event/congress` | POST | **Congress API** - Bill/statement review (Phase 7) |
+| `/event/congress` | POST | **Congress API** - Bill/statement/dispute handling (Phase 8) |
 | `/run_task` | POST | Execute a task by type |
 | `/audit_text` | POST | Audit text for logic issues |
 | `/detect_bias` | POST | Detect bias in text |
@@ -826,7 +919,9 @@ veritas/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py            # Configuration
 │   ├── schemas.py           # Pydantic models for structured output (Phase 7)
-│   ├── routes/veritas.py    # API endpoints (Phase 7: Congress Integration)
+│   ├── dispute_engine.py    # Dispute parsing and classification (Phase 8)
+│   ├── memory_utils.py      # Memory storage utilities (Phase 8)
+│   ├── routes/veritas.py    # API endpoints (Phase 8: Dispute Resolution)
 │   ├── logic/
 │   │   ├── brain.py         # VeritasBrain + handle_event + convenience functions
 │   │   ├── legislative.py   # Legislative functions (Phase 6)
@@ -838,13 +933,17 @@ veritas/
 │   │   ├── ingest.py        # Document ingestion (Phase 4)
 │   │   └── query.py         # Embedding & similarity search (Phase 4)
 │   ├── tools/
-│   │   └── __init__.py      # Tool registry + Congress review tools (Phase 7)
+│   │   └── __init__.py      # Tool registry + Dispute tools (Phase 8)
+│   ├── memory/
+│   │   └── long_term/
+│   │       └── disputes/    # Dispute analysis storage (Phase 8)
 │   └── logs/
 │       ├── veritas_brain.log        # Brain operations
 │       ├── veritas_contributions.log # Analysis audit trail
 │       ├── veritas_legislative.log  # Legislative operations
 │       ├── veritas_legislative_contributions.log # Legislative audit trail
-│       └── rag_query.log            # RAG query logs
+│       ├── rag_query.log            # RAG query logs
+│       └── memory_utils.log         # Memory operations
 ├── memory/
 │   └── long/
 │       └── veritas_corpus.jsonl  # Document corpus storage
@@ -856,6 +955,8 @@ veritas/
 │   ├── test_legislative.py  # Legislative tests (Phase 6)
 │   ├── test_congress_review_tools.py # Congress tool tests (Phase 7)
 │   ├── test_event_handlers.py # Congress event handler tests (Phase 7)
+│   ├── test_dispute_engine.py # Dispute engine tests (Phase 8)
+│   ├── test_dispute_event.py  # Dispute event tests (Phase 8)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -933,18 +1034,34 @@ Veritas is:
 - `/event/congress` endpoint for Congress event handling
   - `bill_for_review`: Review a bill
   - `statement_for_audit`: Audit a statement
-  - `dispute_for_analysis`: Analyze a dispute (stub)
 - Constitutional boundary checks (advisory only disclaimers)
 - Tool registry with `review_bill`, `review_statement`, `audit_text`, `audit_with_sources`
 
-### Phase 8 (Planned)
+### Phase 8 (Complete)
+
+- Dispute Resolution Hooks (Non-Judicial)
+  - `parse_dispute()`: Parse and classify disputes between agents
+  - `DisputeEngine` class for OOP interface
+  - Factual vs. interpretation disagreement detection
+  - Contradiction detection with negation patterns
+- Escalation classification
+  - `sophia`: Ethical/legal ambiguity
+  - `aegis`: Security/safety implications
+  - `congress`: Political/governance impact
+- Memory storage for disputes (`app/memory/long_term/disputes/`)
+- `dispute_for_analysis` event type fully implemented
+- `tool_parse_dispute()` added to tool registry
+
+**Important:** Veritas does NOT escalate events. It only classifies and reports.
+
+### Phase 9 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 9 (Planned)
+### Phase 10 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -953,4 +1070,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 7 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent.
+Phase 8 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events.

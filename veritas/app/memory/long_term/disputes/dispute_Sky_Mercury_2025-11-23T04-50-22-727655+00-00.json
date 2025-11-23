@@ -1,0 +1,39 @@
+{
+  "agents": [
+    "Sky",
+    "Mercury"
+  ],
+  "issues": {
+    "factual_disagreement": false,
+    "interpretation_disagreement": false,
+    "missing_data": true,
+    "logical_issues_A": [],
+    "logical_issues_B": [],
+    "contradictions": []
+  },
+  "needs_escalation": "aegis",
+  "recommendation": "forward_to_aegis",
+  "analysis": {
+    "audit_A": {
+      "claims_count": 0,
+      "fallacies_count": 0,
+      "unsupported_count": 0,
+      "bias_summary": {
+        "political": 0.0,
+        "emotional": 0.941
+      }
+    },
+    "audit_B": {
+      "claims_count": 0,
+      "fallacies_count": 0,
+      "unsupported_count": 0,
+      "bias_summary": {
+        "political": 0.0,
+        "emotional": 0.0
+      }
+    }
+  },
+  "timestamp": "2025-11-23T04:50:22.727655+00:00",
+  "dispute_id": "dispute_Sky_Mercury_2025-11-23T04-50-22-727655+00-00",
+  "stored_at": "2025-11-23T04:50:22.728398+00:00"
+}

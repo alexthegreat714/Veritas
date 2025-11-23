@@ -58,16 +58,23 @@ class TestCongressEventEndpoint:
         assert data["result"]["item_type"] == "statement"
         assert data["result"]["id"] == "STMT-TEST-001"
 
-    def test_dispute_for_analysis_stub(self):
-        """Test dispute_for_analysis event type (stub)."""
+    def test_dispute_for_analysis_basic(self):
+        """Test dispute_for_analysis event type (Phase 8 implementation)."""
         response = client.post(
             "/event/congress",
             json={
                 "event_type": "dispute_for_analysis",
                 "payload": {
-                    "dispute_id": "DISP-001",
-                    "parties": ["party_a", "party_b"],
-                    "claims": ["Claim 1", "Claim 2"]
+                    "agent_A": {
+                        "agent": "Sky",
+                        "text": "The proposal is valid.",
+                        "metadata": {}
+                    },
+                    "agent_B": {
+                        "agent": "Mercury",
+                        "text": "The proposal has issues.",
+                        "metadata": {}
+                    }
                 }
             }
         )
@@ -76,8 +83,10 @@ class TestCongressEventEndpoint:
         data = response.json()
         assert data["ok"] is True
         assert data["event_type"] == "dispute_for_analysis"
-        # Stub response
-        assert data["result"]["status"] == "stub"
+        # Phase 8: Full dispute analysis result
+        assert "agents" in data["result"]
+        assert "issues" in data["result"]
+        assert "needs_escalation" in data["result"]
 
     def test_unknown_event_type_returns_400(self):
         """Test that unknown event type returns 400."""
@@ -213,14 +222,14 @@ class TestCongressEventEndpoint:
 class TestStatusEndpoint:
     """Tests for /status endpoint updates."""
 
-    def test_status_shows_phase_7(self):
-        """Test that status shows phase 7."""
+    def test_status_shows_phase_8(self):
+        """Test that status shows phase 8."""
         response = client.get("/status")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["phase"] == 7
-        assert data["version"] == "0.7.0"
+        assert data["phase"] == 8
+        assert data["version"] == "0.8.0"
 
     def test_status_shows_congress_integration(self):
         """Test that status shows Congress integration active."""

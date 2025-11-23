@@ -5,7 +5,7 @@ This package contains tool definitions and integrations for the Veritas system.
 Tools provide specialized capabilities that can be invoked by the truth auditing
 system to perform specific tasks.
 
-Phase 4: Congress-facing review tools and structured output.
+Phase 5: Dispute resolution tools added.
 """
 
 import logging
@@ -23,6 +23,8 @@ from app.schemas import (
     AuditWithSourcesResult,
     CongressReviewResult,
 )
+from app.dispute_engine import parse_dispute, get_dispute_engine
+from app.memory_utils import store_dispute_analysis
 
 
 logger = logging.getLogger(__name__)
@@ -412,6 +414,84 @@ def tool_review_statement(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ============================================================================
+# Dispute Resolution Tools (Phase 5)
+# ============================================================================
+# NOTE: Veritas DOES NOT escalate or forward events.
+# It only classifies disputes and reports findings.
+# Actual escalation is handled by Sky/n8n.
+
+
+def tool_parse_dispute(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Parse and analyze a dispute between two agents.
+
+    NOTE: Veritas does NOT:
+    - Rule on ethics or law (Sophia's domain)
+    - Rule on security or danger (Aegis's domain)
+    - Override Congress, Sky, or any agent
+    - Actually escalate or forward events
+
+    Veritas only classifies what kind of disagreement it is,
+    provides fact-logic analysis, and identifies whether
+    external escalation is required.
+
+    Expects payload:
+    {
+        "agent_A": {
+            "agent": str,      # Agent name (e.g., "Sky", "Aegis")
+            "text": str,       # The agent's position/statement
+            "metadata": dict   # Optional additional context
+        },
+        "agent_B": {
+            "agent": str,
+            "text": str,
+            "metadata": dict
+        }
+    }
+
+    Returns:
+        Dispute analysis result including:
+        - agents: [str, str] - Names of disputing agents
+        - issues: dict - Factual/interpretation disagreements, logical issues
+        - needs_escalation: "none" | "sophia" | "aegis" | "congress"
+        - recommendation: str - Suggested action
+        - analysis: dict - Detailed audit results
+        - storage: dict - Storage confirmation
+    """
+    logger.info("tool_parse_dispute invoked")
+
+    agent_a = payload.get("agent_A", {})
+    agent_b = payload.get("agent_B", {})
+
+    if not agent_a or not agent_b:
+        return {
+            "error": "Both agent_A and agent_B are required",
+            "agents": [],
+            "issues": {},
+            "needs_escalation": "none",
+            "recommendation": "request_more_data",
+        }
+
+    if not agent_a.get("text") or not agent_b.get("text"):
+        return {
+            "error": "Both agents must have non-empty text",
+            "agents": [agent_a.get("agent", "A"), agent_b.get("agent", "B")],
+            "issues": {"missing_data": True},
+            "needs_escalation": "none",
+            "recommendation": "request_more_data",
+        }
+
+    # Parse the dispute
+    result = parse_dispute(agent_a, agent_b)
+
+    # Store the analysis
+    storage_result = store_dispute_analysis(result)
+    result["storage"] = storage_result
+
+    return result
+
+
+# ============================================================================
 # Tool Registry
 # ============================================================================
 
@@ -439,6 +519,7 @@ class ToolRegistry:
                 p.get("text", ""),
                 p.get("sources", [])
             ).model_dump(),
+            "parse_dispute": tool_parse_dispute,
         }
         self._initialized = True
 

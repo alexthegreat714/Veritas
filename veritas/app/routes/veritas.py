@@ -27,7 +27,7 @@ from app.logic.legislative import (
     get_legislative_handler,
 )
 from app.rag.ingest import ingest_documents, clear_corpus, get_corpus_stats
-from app.tools import tool_review_bill, tool_review_statement, registry as tool_registry
+from app.tools import tool_review_bill, tool_review_statement, tool_parse_dispute, registry as tool_registry
 from app.schemas import EventResponse, ErrorResponse
 
 
@@ -210,8 +210,8 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.7.0",
-        "phase": 7,
+        "version": "0.8.0",
+        "phase": 8,
         "components": {
             "brain": "active",
             "auditor": "active",
@@ -223,6 +223,7 @@ async def get_status() -> Dict[str, Any]:
             "legislative": "active",
             "congress_integration": "active",
             "structured_output": "active",
+            "dispute_engine": "active",
         },
         "tools": tool_registry.list_tools(),
     }
@@ -304,14 +305,14 @@ async def handle_event(event: VeritasEvent) -> VeritasResponse:
 
 
 # ============================================================================
-# Congress Event Types (Phase 4)
+# Congress Event Types (Phase 5)
 # ============================================================================
 
 # Supported Congress event types
 CONGRESS_EVENT_TYPES = {
     "bill_for_review": tool_review_bill,
     "statement_for_audit": tool_review_statement,
-    "dispute_for_analysis": None,  # Stub for Phase 5
+    "dispute_for_analysis": tool_parse_dispute,  # Phase 5 implementation
 }
 
 
@@ -324,18 +325,24 @@ class CongressEventRequest(BaseModel):
 @router.post("/event/congress", response_class=JSONResponse)
 async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]:
     """
-    Handle structured events from Congress (Phase 4).
+    Handle structured events from Congress (Phase 5).
 
     Supported event_type values:
     - "bill_for_review": Review a bill for logical consistency
     - "statement_for_audit": Audit a statement for truth/bias
-    - "dispute_for_analysis": Analyze a dispute (stub for Phase 5)
+    - "dispute_for_analysis": Analyze a dispute between agents (Phase 5)
 
     Expected payload patterns:
     - bill_for_review: {"bill_id": str, "text": str}
     - statement_for_audit: {"statement_id": str, "text": str}
+    - dispute_for_analysis: {"agent_A": {...}, "agent_B": {...}}
 
     Returns CongressReviewResult for bill/statement reviews.
+    Returns dispute analysis result for disputes.
+
+    NOTE: Veritas does NOT escalate or forward events.
+    It only classifies disputes and reports findings.
+    Actual escalation is handled by Sky/n8n.
     """
     logger.info(f"Congress event received: {request.event_type}")
 
@@ -349,17 +356,6 @@ async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]
                 "supported_types": list(CONGRESS_EVENT_TYPES.keys()),
             }
         )
-
-    # Handle dispatch for analysis (stub)
-    if request.event_type == "dispute_for_analysis":
-        return {
-            "ok": True,
-            "event_type": request.event_type,
-            "result": {
-                "status": "stub",
-                "message": "Dispute analysis will be implemented in Phase 5",
-            }
-        }
 
     # Get the appropriate tool
     tool = CONGRESS_EVENT_TYPES[request.event_type]

@@ -338,8 +338,8 @@ class TestStatusEndpoint:
         response = client.get("/status")
         assert response.status_code == 200
         data = response.json()
-        assert data["phase"] == 7
-        assert data["version"] == "0.7.0"
+        assert data["phase"] == 8
+        assert data["version"] == "0.8.0"
         assert data["components"]["legislative"] == "active"
 
 
