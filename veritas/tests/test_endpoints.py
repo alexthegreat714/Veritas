@@ -2,7 +2,7 @@
 Veritas API Endpoint Tests
 
 This module tests all API endpoints for proper response codes and JSON structure.
-Phase 3: Tests for VeritasBrain integration.
+Phase 5: Tests for VeritasBrain integration and Event API.
 """
 
 import pytest
@@ -45,7 +45,8 @@ class TestVeritasEndpoints:
         assert data["components"]["auditor"] == "active"
         assert data["components"]["bias_detector"] == "active"
         assert data["components"]["rag"] == "active"
-        assert data["phase"] == 4
+        assert data["components"]["event_api"] == "active"
+        assert data["phase"] == 5
 
     def test_run_task_audit(self, client):
         """Test the run_task endpoint with audit_text task."""
@@ -136,10 +137,14 @@ class TestVeritasEndpoints:
         assert data["ok"] is True
 
     def test_event(self, client):
-        """Test the event endpoint accepts event submissions."""
+        """Test the event endpoint accepts event submissions (Phase 5 format)."""
         response = client.post(
             "/event",
-            json={"event_type": "test_event", "data": {"info": "test"}}
+            json={
+                "event_type": "audit-request",
+                "source": "test",
+                "payload": {"text": "Test text"}
+            }
         )
         assert response.status_code == 200
         data = response.json()
@@ -148,9 +153,9 @@ class TestVeritasEndpoints:
         assert "event_type" in data
 
     def test_event_analyze_processes_data(self, client):
-        """Test the event endpoint processes analyze events."""
+        """Test the legacy event endpoint processes analyze events."""
         response = client.post(
-            "/event",
+            "/event/legacy",
             json={"event_type": "analyze", "data": {"text": "Text to analyze"}}
         )
         assert response.status_code == 200
@@ -161,9 +166,9 @@ class TestVeritasEndpoints:
         assert "details" in data
 
     def test_event_audit_processes_data(self, client):
-        """Test the event endpoint processes audit events."""
+        """Test the legacy event endpoint processes audit events."""
         response = client.post(
-            "/event",
+            "/event/legacy",
             json={"event_type": "audit", "data": {"text": "Text to audit"}}
         )
         assert response.status_code == 200
@@ -174,7 +179,7 @@ class TestVeritasEndpoints:
     def test_event_non_processable_logged_only(self, client):
         """Test non-processable events are logged but not processed."""
         response = client.post(
-            "/event",
+            "/event/legacy",
             json={"event_type": "notification", "data": {"msg": "info"}}
         )
         assert response.status_code == 200

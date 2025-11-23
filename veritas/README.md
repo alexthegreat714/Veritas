@@ -2,9 +2,11 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 4
+## Current Status: Phase 5
 
-**Phase 4 implements the RAG (Retrieval-Augmented Generation) memory system for context-aware analysis.**
+**Phase 5 implements the standardized Event API for inter-agent communication.**
+
+Sky, Congress, and other agents can now request analysis from Veritas using structured event types.
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 
@@ -389,6 +391,167 @@ result = rag.get_context("summarize findings", max_tokens=4000)
 - **In-memory processing**: Entire corpus loaded for each query
 - **No persistence across restarts**: Corpus file must be re-ingested if deleted
 
+## Event API for Other Agents (Phase 5)
+
+The Event API provides a standardized interface for inter-agent communication. Sky, Congress, and other agents can request analysis from Veritas using structured event types.
+
+### VeritasEvent Schema
+
+```json
+{
+  "event_type": "audit-request",
+  "source": "sky",
+  "payload": { "text": "Text to analyze..." },
+  "correlation_id": "optional-trace-id-123"
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `event_type` | string | Yes | Type of analysis requested |
+| `source` | string | Yes | Sender agent ID (e.g., "sky", "congress") |
+| `payload` | object | Yes | Task-specific content |
+| `correlation_id` | string | No | Tracing ID for request correlation |
+
+### VeritasResponse Schema
+
+```json
+{
+  "ok": true,
+  "event_type": "audit-request",
+  "correlation_id": "optional-trace-id-123",
+  "result": {
+    "task_type": "audit_text",
+    "summary": { ... },
+    "details": { ... }
+  }
+}
+```
+
+### Supported Event Types
+
+| Event Type | Description | Payload Fields | Used By |
+|------------|-------------|----------------|---------|
+| `audit-request` | General text audit (logic + bias) | `text` | Sky |
+| `bill-logic-check` | Audit bill/policy text | `bill_text` or `text` | Congress, Bill Engine |
+| `argument-integrity-check` | Validate reasoning chain | `steps` or `chain` | Aero, Mercury, Apollo |
+| `source-integrity-check` | Check source credibility | `sources` | Any agent |
+| `composite-audit` | Combined analysis | Any combination | Sky (complex cases) |
+
+### Example: Audit Request from Sky
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "audit-request",
+    "source": "sky",
+    "payload": { "text": "You are wrong because you are stupid." },
+    "correlation_id": "sky-session-456"
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "event_type": "audit-request",
+  "correlation_id": "sky-session-456",
+  "result": {
+    "task_type": "audit_text",
+    "summary": {
+      "has_major_issues": true,
+      "issue_types": ["logical_fallacies"],
+      "confidence_estimate": 0.85
+    },
+    "details": {
+      "audit": { "logical_fallacies": [{"type": "Ad Hominem", ...}] },
+      "bias": { ... },
+      "memory_context": { ... }
+    }
+  }
+}
+```
+
+### Example: Bill Logic Check from Congress
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "bill-logic-check",
+    "source": "congress",
+    "payload": {
+      "bill_text": "All citizens shall have equal rights. No citizen shall be discriminated against."
+    }
+  }'
+```
+
+### Example: Argument Integrity Check
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "argument-integrity-check",
+    "source": "apollo",
+    "payload": {
+      "steps": [
+        "Premise: All mammals are warm-blooded",
+        "Premise: Whales are mammals",
+        "Conclusion: Therefore whales are warm-blooded"
+      ]
+    }
+  }'
+```
+
+### Example: Composite Audit
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "composite-audit",
+    "source": "sky",
+    "payload": {
+      "text": "Climate change is real and urgent.",
+      "steps": ["CO2 levels rising", "Temperatures increasing", "Climate changing"],
+      "sources": ["https://www.ipcc.ch/report", "https://www.nature.com/climate"]
+    }
+  }'
+```
+
+### Error Handling
+
+Unknown event types return `ok: false`:
+
+```json
+{
+  "ok": false,
+  "event_type": "unknown-type",
+  "correlation_id": null,
+  "result": {
+    "error": "Unknown event_type 'unknown-type'. Valid types: [...]",
+    "error_type": "validation_error"
+  }
+}
+```
+
+### Agent Conventions
+
+| Agent | Primary Event Types |
+|-------|---------------------|
+| **Sky** | `audit-request`, `composite-audit` |
+| **Congress** | `bill-logic-check` |
+| **Bill Engine** | `bill-logic-check` |
+| **Apollo** | `argument-integrity-check` |
+| **Mercury** | `argument-integrity-check`, `source-integrity-check` |
+| **Aero** | `argument-integrity-check` |
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -396,6 +559,7 @@ result = rag.get_context("summarize findings", max_tokens=4000)
 | `/` | GET | Service information |
 | `/health` | GET | Health check |
 | `/status` | GET | Component status |
+| `/event` | POST | **Event API** - Inter-agent communication (Phase 5) |
 | `/run_task` | POST | Execute a task by type |
 | `/audit_text` | POST | Audit text for logic issues |
 | `/detect_bias` | POST | Detect bias in text |
@@ -404,6 +568,7 @@ result = rag.get_context("summarize findings", max_tokens=4000)
 | `/ingest_docs` | POST | Ingest documents into corpus |
 | `/clear_corpus` | POST | Clear all documents from corpus |
 | `/corpus_stats` | GET | Get corpus statistics |
+| `/event/legacy` | POST | Legacy event format (deprecated) |
 
 ## Installation
 
@@ -443,9 +608,9 @@ veritas/
 ├── app/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py            # Configuration
-│   ├── routes/veritas.py    # API endpoints (Phase 4: RAG integration)
+│   ├── routes/veritas.py    # API endpoints (Phase 5: Event API)
 │   ├── logic/
-│   │   ├── brain.py         # VeritasBrain reasoning engine (Phase 3)
+│   │   ├── brain.py         # VeritasBrain + handle_event (Phase 5)
 │   │   ├── auditor.py       # Logic auditing (Phase 2)
 │   │   ├── bias_detector.py # Bias detection (Phase 2)
 │   │   ├── chain_validator.py # Chain validation (Phase 2)
@@ -464,6 +629,7 @@ veritas/
 ├── tests/
 │   ├── test_brain.py        # Brain unit tests (Phase 3)
 │   ├── test_rag.py          # RAG system tests (Phase 4)
+│   ├── test_events.py       # Event API tests (Phase 5)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -510,14 +676,23 @@ Veritas is:
 - Memory-augmented analysis in VeritasBrain
 - Document ingestion API endpoints
 
-### Phase 5 (Planned)
+### Phase 5 (Complete)
+
+- Standardized Event API for inter-agent communication
+- VeritasEvent and VeritasResponse Pydantic models
+- Support for audit-request, bill-logic-check, argument-integrity-check, source-integrity-check, composite-audit
+- VeritasBrain.handle_event() for event processing
+- Agent conventions for Sky, Congress, Apollo, Mercury, Aero
+- Correlation ID support for request tracing
+
+### Phase 6 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 6 (Planned)
+### Phase 7 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -526,4 +701,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 4 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search.
+Phase 5 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search.

@@ -4,7 +4,8 @@ Veritas API Routes
 This module defines the API endpoints for the Veritas truth auditing service.
 All endpoints return JSON responses.
 
-Phase 4: Integrated with VeritasBrain reasoning engine and RAG memory system.
+Phase 5: Standardized event API for inter-agent communication.
+Integrated with VeritasBrain reasoning engine and RAG memory system.
 """
 
 import logging
@@ -30,7 +31,44 @@ brain = get_brain()
 router = APIRouter(prefix="", tags=["veritas"])
 
 
-# Request Models
+# ============================================================================
+# Event Models (Phase 5) - For inter-agent communication
+# ============================================================================
+
+class VeritasEvent(BaseModel):
+    """
+    Standardized event model for inter-agent communication.
+
+    Used by Sky, Congress, and other agents to request analysis from Veritas.
+
+    Supported event_type values:
+    - "audit-request": General text audit (logic + bias)
+    - "bill-logic-check": Audit a proposed bill or policy
+    - "argument-integrity-check": Validate chain-of-thought reasoning
+    - "source-integrity-check": Validate supporting sources
+    - "composite-audit": Combined analysis of multiple data types
+    """
+    event_type: str = Field(..., description="Event type (e.g., 'audit-request', 'bill-logic-check')")
+    source: str = Field(..., description="Sender agent ID (e.g., 'sky', 'apollo', 'congress')")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Task-specific content")
+    correlation_id: Optional[str] = Field(default=None, description="Tracing ID across systems")
+
+
+class VeritasResponse(BaseModel):
+    """
+    Standardized response model for event-based requests.
+
+    Returns structured analysis results with tracing support.
+    """
+    ok: bool = Field(..., description="Whether the request succeeded")
+    event_type: str = Field(..., description="The event type that was processed")
+    correlation_id: Optional[str] = Field(default=None, description="Echo of request correlation_id")
+    result: Dict[str, Any] = Field(default_factory=dict, description="Analysis results or error details")
+
+
+# ============================================================================
+# Legacy Request Models
+# ============================================================================
 
 class TaskRequest(BaseModel):
     """Request model for running a task."""
@@ -39,7 +77,7 @@ class TaskRequest(BaseModel):
 
 
 class EventRequest(BaseModel):
-    """Request model for submitting an event."""
+    """Legacy request model for submitting an event (deprecated, use VeritasEvent)."""
     event_type: str = Field(..., description="Type of event")
     data: Dict[str, Any] = Field(default_factory=dict, description="Event data")
 
@@ -148,8 +186,8 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.4.0",
-        "phase": 4,
+        "version": "0.5.0",
+        "phase": 5,
         "components": {
             "brain": "active",
             "auditor": "active",
@@ -157,6 +195,7 @@ async def get_status() -> Dict[str, Any]:
             "chain_validator": "active",
             "source_checker": "active",
             "rag": "active",
+            "event_api": "active",
         },
     }
 
@@ -177,23 +216,73 @@ async def shutdown() -> Dict[str, Any]:
     }
 
 
-@router.post("/event", response_class=JSONResponse)
-async def submit_event(request: EventRequest) -> Dict[str, Any]:
+@router.post("/event", response_model=VeritasResponse)
+async def handle_event(event: VeritasEvent) -> VeritasResponse:
     """
-    Submit an event to the Veritas event processing system.
+    Handle standardized events from other agents (Phase 5).
 
-    Events can include external triggers, notifications,
-    or data updates that Veritas should process.
+    This is the primary entry point for inter-agent communication.
+    Sky, Congress, and other agents use this endpoint to request
+    analysis from Veritas.
 
-    Supported event types:
-    - analyze: Run full analysis on event data
-    - audit: Run audit analysis
-    - validate: Run chain validation
-    - check: Run source checking
+    Supported event_type values:
+    - "audit-request": General text audit (uses payload.text)
+    - "bill-logic-check": Audit bill/policy (uses payload.bill_text or text)
+    - "argument-integrity-check": Validate reasoning (uses payload.steps)
+    - "source-integrity-check": Check sources (uses payload.sources)
+    - "composite-audit": Combined analysis
 
-    Other event types are logged but not processed.
+    Agent conventions:
+    - Sky: Uses "audit-request" for general text, "composite-audit" for complex cases
+    - Congress/Bill Engine: Uses "bill-logic-check" with payload.bill_text
+    - Aero/Mercury/Apollo: Uses "argument-integrity-check" for reasoning chains
     """
-    logger.info(f"Event received: {request.event_type}")
+    logger.info(f"Event received: type={event.event_type}, source={event.source}, "
+                f"correlation_id={event.correlation_id}")
+
+    try:
+        # Use VeritasBrain's handle_event method for processing
+        result = brain.handle_event(event.event_type, event.payload, event.source)
+
+        return VeritasResponse(
+            ok=result.get("ok", True),
+            event_type=event.event_type,
+            correlation_id=event.correlation_id,
+            result=result,
+        )
+    except ValueError as e:
+        # Unknown event type or validation error
+        logger.warning(f"Event handling error: {e}")
+        return VeritasResponse(
+            ok=False,
+            event_type=event.event_type,
+            correlation_id=event.correlation_id,
+            result={
+                "error": str(e),
+                "error_type": "validation_error",
+            },
+        )
+    except Exception as e:
+        logger.error(f"Event processing error: {e}")
+        return VeritasResponse(
+            ok=False,
+            event_type=event.event_type,
+            correlation_id=event.correlation_id,
+            result={
+                "error": str(e),
+                "error_type": "processing_error",
+            },
+        )
+
+
+@router.post("/event/legacy", response_class=JSONResponse)
+async def submit_event_legacy(request: EventRequest) -> Dict[str, Any]:
+    """
+    Legacy event endpoint (deprecated, use /event with VeritasEvent model).
+
+    Maintained for backward compatibility with Phase 4 event format.
+    """
+    logger.info(f"Legacy event received: {request.event_type}")
 
     # Event types that trigger brain processing
     processable_events = {"analyze", "audit", "validate", "check"}

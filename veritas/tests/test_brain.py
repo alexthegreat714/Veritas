@@ -9,6 +9,7 @@ import pytest
 from typing import Any, Dict
 
 from app.logic.brain import VeritasBrain, get_brain
+from app.rag.ingest import clear_corpus
 
 
 class TestVeritasBrainInitialization:
@@ -135,9 +136,12 @@ class TestRetrieveRelevantMemory:
         assert "memory_hits" in result
 
     def test_retrieve_memory_empty_payload(self):
-        """Test memory retrieval with empty payload returns empty."""
+        """Test memory retrieval with empty payload uses fallback query."""
+        # Clear corpus to ensure predictable test state
+        clear_corpus()
         brain = VeritasBrain()
         result = brain.retrieve_relevant_memory({})
+        # With empty corpus, should return empty hits
         assert result["memory_hits"] == []
         assert result["memory_summary"] == ""
 

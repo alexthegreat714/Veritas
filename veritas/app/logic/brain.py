@@ -7,8 +7,9 @@ This module contains the VeritasBrain class that coordinates:
 - Analytical tool orchestration
 - Structured output synthesis
 - Contribution logging
+- Event handling (Phase 5)
 
-Phase 4: Integrated with local RAG memory system.
+Phase 5: Standardized event API for inter-agent communication.
 All processing is deterministic with no ML models.
 """
 
@@ -567,6 +568,191 @@ class VeritasBrain:
         self.logger.info("VeritasBrain processing complete")
 
         return result
+
+    # ========================================================================
+    # Event Handling (Phase 5) - Inter-agent communication
+    # ========================================================================
+
+    # Mapping from event_type to internal task_type
+    EVENT_TYPE_MAPPING = {
+        "audit-request": "audit_text",
+        "bill-logic-check": "audit_text",
+        "argument-integrity-check": "validate_chain",
+        "source-integrity-check": "check_sources",
+        "composite-audit": "composite_audit",
+    }
+
+    # Valid event types
+    VALID_EVENT_TYPES = set(EVENT_TYPE_MAPPING.keys())
+
+    def handle_event(
+        self,
+        event_type: str,
+        payload: Dict[str, Any],
+        source: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        High-level handler for event-based calls from other agents.
+
+        Maps event types into internal task types and runs the full
+        analysis pipeline. Used by the /event endpoint.
+
+        Supported event_type values:
+        - "audit-request": General text audit (logic + bias)
+            - Uses payload.text
+            - Sky uses this for general text analysis
+        - "bill-logic-check": Audit a proposed bill or policy
+            - Uses payload.bill_text or payload.text
+            - Congress/Bill Engine uses this
+        - "argument-integrity-check": Validate chain-of-thought reasoning
+            - Uses payload.steps
+            - Aero/Mercury/Apollo use this for reasoning chains
+        - "source-integrity-check": Validate supporting sources
+            - Uses payload.sources
+            - Used for reference list validation
+        - "composite-audit": Combined analysis of multiple data types
+            - Uses any combination of text, steps, sources
+            - Sky uses this for complex cases
+
+        Args:
+            event_type: The event type string from VeritasEvent.
+            payload: The task-specific content from VeritasEvent.
+            source: The sender agent ID (for logging purposes only).
+
+        Returns:
+            Dictionary containing:
+            - ok: Whether processing succeeded
+            - task_type: The internal task type used
+            - summary: Analysis summary
+            - details: Full analysis details
+
+        Raises:
+            ValueError: If event_type is not recognized.
+        """
+        self.logger.info(f"Handling event: type={event_type}, source={source}")
+
+        # Validate event type
+        if event_type not in self.VALID_EVENT_TYPES:
+            self.logger.warning(f"Unknown event type: {event_type}")
+            raise ValueError(
+                f"Unknown event_type '{event_type}'. "
+                f"Valid types: {sorted(self.VALID_EVENT_TYPES)}"
+            )
+
+        # Normalize payload based on event type
+        normalized_payload = self._normalize_event_payload(event_type, payload)
+
+        # Get the mapped internal task type
+        mapped_task_type = self.EVENT_TYPE_MAPPING[event_type]
+
+        # Run the pipeline
+        task_type = self.classify_task(normalized_payload)
+        memory_data = self.retrieve_relevant_memory(normalized_payload)
+        tool_results = self.run_audit_tools(task_type, normalized_payload)
+        result = self.synthesize_findings(task_type, memory_data, tool_results)
+
+        # Log with event metadata
+        self._log_event_contribution(
+            event_type, source, normalized_payload, result
+        )
+
+        self.logger.info(f"Event handling complete: {event_type}")
+
+        return {
+            "ok": True,
+            "task_type": result["task_type"],
+            "summary": result["summary"],
+            "details": result["details"],
+        }
+
+    def _normalize_event_payload(
+        self,
+        event_type: str,
+        payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Normalize event payload to match internal expectations.
+
+        Handles event-specific field mappings:
+        - bill-logic-check: Maps bill_text -> text
+        - argument-integrity-check: Ensures steps is a list
+        - source-integrity-check: Ensures sources is a list
+
+        Args:
+            event_type: The event type.
+            payload: The raw payload from the event.
+
+        Returns:
+            Normalized payload dict.
+        """
+        normalized = dict(payload)
+
+        if event_type == "bill-logic-check":
+            # Map bill_text to text for processing
+            if "bill_text" in normalized and "text" not in normalized:
+                normalized["text"] = normalized["bill_text"]
+
+        elif event_type == "argument-integrity-check":
+            # Ensure steps is present
+            if "steps" not in normalized and "chain" in normalized:
+                normalized["steps"] = normalized["chain"]
+
+        elif event_type == "source-integrity-check":
+            # Ensure sources is a list
+            if "sources" not in normalized:
+                normalized["sources"] = []
+
+        return normalized
+
+    def _log_event_contribution(
+        self,
+        event_type: str,
+        source: Optional[str],
+        payload: Dict[str, Any],
+        result: Dict[str, Any]
+    ) -> None:
+        """
+        Log event contribution with event-specific metadata.
+
+        Similar to log_contribution but includes event type and source.
+
+        Args:
+            event_type: The event type processed.
+            source: The sender agent ID.
+            payload: The normalized payload.
+            result: The synthesis result.
+        """
+        try:
+            # Extract minimal metadata from payload
+            payload_meta = {
+                "keys": list(payload.keys()),
+            }
+
+            if "text" in payload:
+                payload_meta["text_length"] = len(payload["text"])
+            if "bill_text" in payload:
+                payload_meta["bill_text_length"] = len(payload["bill_text"])
+            if "steps" in payload:
+                payload_meta["steps_count"] = len(payload["steps"])
+            if "chain" in payload:
+                payload_meta["chain_length"] = len(payload["chain"])
+            if "sources" in payload:
+                payload_meta["sources_count"] = len(payload["sources"])
+
+            log_entry = {
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "event_type": event_type,
+                "source": source,
+                "task_type": result.get("task_type"),
+                "payload_metadata": payload_meta,
+                "summary": result.get("summary", {}),
+            }
+
+            self._contribution_logger.info(json.dumps(log_entry))
+            self.logger.debug(f"Event contribution logged: {event_type} from {source}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to log event contribution: {e}")
 
 
 # Module-level instance for convenience
