@@ -227,5 +227,5 @@ class TestStatusEndpointUpdated:
         assert response.status_code == 200
         data = response.json()
 
-        assert data["phase"] == 9
-        assert data["version"] == "0.9.0"
+        assert data["phase"] == 10
+        assert data["version"] == "0.10.0"

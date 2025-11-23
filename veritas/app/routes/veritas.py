@@ -32,6 +32,7 @@ from app.tools import (
     tool_review_statement,
     tool_parse_dispute,
     tool_run_monitoring,
+    tool_generate_report,
     registry as tool_registry,
 )
 from app.schemas import EventResponse, ErrorResponse
@@ -216,8 +217,8 @@ async def get_status() -> Dict[str, Any]:
     return {
         "ok": True,
         "status": "operational",
-        "version": "0.9.0",
-        "phase": 9,
+        "version": "0.10.0",
+        "phase": 10,
         "components": {
             "brain": "active",
             "auditor": "active",
@@ -231,6 +232,8 @@ async def get_status() -> Dict[str, Any]:
             "structured_output": "active",
             "dispute_engine": "active",
             "monitoring_engine": "active",
+            "trend_engine": "active",
+            "reporting_engine": "active",
         },
         "tools": tool_registry.list_tools(),
     }
@@ -321,35 +324,39 @@ CONGRESS_EVENT_TYPES = {
     "statement_for_audit": tool_review_statement,
     "dispute_for_analysis": tool_parse_dispute,  # Phase 5 implementation
     "monitoring_cycle": tool_run_monitoring,  # Phase 6 implementation
+    "generate_veritas_report": tool_generate_report,  # Phase 7 implementation
 }
 
 
 class CongressEventRequest(BaseModel):
     """Request model for Congress events."""
-    event_type: str = Field(..., description="Type of event: bill_for_review | statement_for_audit | dispute_for_analysis | monitoring_cycle")
+    event_type: str = Field(..., description="Type of event: bill_for_review | statement_for_audit | dispute_for_analysis | monitoring_cycle | generate_veritas_report")
     payload: Dict[str, Any] = Field(default_factory=dict, description="Event payload")
 
 
 @router.post("/event/congress", response_class=JSONResponse)
 async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]:
     """
-    Handle structured events from Congress (Phase 5/6).
+    Handle structured events from Congress (Phase 5/6/7).
 
     Supported event_type values:
     - "bill_for_review": Review a bill for logical consistency
     - "statement_for_audit": Audit a statement for truth/bias
     - "dispute_for_analysis": Analyze a dispute between agents (Phase 5)
     - "monitoring_cycle": Run drift/bias/anomaly monitoring (Phase 6)
+    - "generate_veritas_report": Generate comprehensive trend/performance report (Phase 7)
 
     Expected payload patterns:
     - bill_for_review: {"bill_id": str, "text": str}
     - statement_for_audit: {"statement_id": str, "text": str}
     - dispute_for_analysis: {"agent_A": {...}, "agent_B": {...}}
     - monitoring_cycle: {"limit": int} (optional, default 10)
+    - generate_veritas_report: {} (no required payload)
 
     Returns CongressReviewResult for bill/statement reviews.
     Returns dispute analysis result for disputes.
     Returns monitoring snapshot for monitoring cycles.
+    Returns full VeritasReport for report generation.
 
     NOTE: Veritas does NOT escalate or forward events.
     It only classifies disputes and reports findings.

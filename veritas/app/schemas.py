@@ -185,3 +185,47 @@ class ErrorResponse(BaseModel):
         default=None,
         description="List of supported event types (for unknown type errors)"
     )
+
+
+# ============================================================================
+# Phase 7: Reporting Models
+# ============================================================================
+
+
+class VeritasReport(BaseModel):
+    """
+    Comprehensive Veritas report for governance-grade analysis.
+
+    Contains long-term trends, performance metrics, and chart-ready data.
+
+    NOTE: All reports are informational. Veritas does not take autonomous action.
+    """
+
+    meta: Dict[str, Any] = Field(
+        ...,
+        description="Report metadata: agent, version, timestamp, audits_analyzed"
+    )
+    trends: Dict[str, Any] = Field(
+        ...,
+        description="Long-term trend data: bias_trends, logic_trends, source_trends"
+    )
+    monitoring: Dict[str, Any] = Field(
+        ...,
+        description="Recent monitoring snapshot or status"
+    )
+    performance: Dict[str, Any] = Field(
+        ...,
+        description="Performance score, grades, stability index"
+    )
+    chart_data: Dict[str, Any] = Field(
+        ...,
+        description="Chart-ready arrays: bias_over_time, logic_issues_over_time, source_rates"
+    )
+    summary: str = Field(
+        ...,
+        description="Human-readable summary of the report"
+    )
+    recommendations: List[str] = Field(
+        default_factory=list,
+        description="Advisory recommendations (Veritas is advisory only)"
+    )

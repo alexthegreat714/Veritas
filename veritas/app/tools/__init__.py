@@ -7,6 +7,7 @@ system to perform specific tasks.
 
 Phase 5: Dispute resolution tools added.
 Phase 6: Monitoring tools added.
+Phase 7: Reporting tools added.
 """
 
 import logging
@@ -32,6 +33,7 @@ from app.memory_utils import (
     store_monitoring_snapshot,
 )
 from app.monitoring_engine import run_monitoring_cycle, get_monitoring_engine
+from app.reporting import generate_full_veritas_report, store_report, get_reporting_engine
 
 
 logger = logging.getLogger(__name__)
@@ -555,6 +557,64 @@ def tool_run_monitoring(payload: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ============================================================================
+# Reporting Tools (Phase 7)
+# ============================================================================
+# NOTE: Veritas monitors only — never intervenes or takes autonomous actions.
+# All reports are informational and do not constitute decisions.
+
+
+def tool_generate_report(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Generate a comprehensive Veritas report.
+
+    NOTE: Veritas monitors only — never intervenes or takes autonomous actions.
+    Reports are informational and returned to the caller for review.
+
+    Expects optional payload:
+    {
+        "store": bool  # Whether to store the report (default: True)
+    }
+
+    Returns:
+        {
+            "meta": {...},
+            "trends": {...},
+            "monitoring": {...},
+            "performance": {...},
+            "chart_data": {...},
+            "summary": str,
+            "recommendations": [...],
+            "storage": {...}
+        }
+
+    Steps:
+    1. Load all audits from long-term storage.
+    2. Compute long-term trends (bias, logic, source).
+    3. Load recent monitoring snapshot.
+    4. Compute performance score.
+    5. Store report if requested.
+    6. Return full report.
+    """
+    logger.info("tool_generate_report invoked")
+
+    should_store = payload.get("store", True)
+
+    # Generate full report
+    report = generate_full_veritas_report()
+
+    # Store if requested
+    if should_store:
+        storage_result = store_report(report)
+        report["storage"] = storage_result
+    else:
+        report["storage"] = {"stored": False, "reason": "storage disabled"}
+
+    logger.info(f"Report generated: score={report.get('performance', {}).get('score')}")
+
+    return report
+
+
+# ============================================================================
 # Tool Registry
 # ============================================================================
 
@@ -584,6 +644,7 @@ class ToolRegistry:
             ).model_dump(),
             "parse_dispute": tool_parse_dispute,
             "run_monitoring": tool_run_monitoring,
+            "generate_report": tool_generate_report,
         }
         self._initialized = True
 

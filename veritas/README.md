@@ -2,16 +2,17 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 9
+## Current Status: Phase 10
 
-**Phase 9 implements Automated Monitoring, Drift Detection, Bias Trends, and Long-Term Logging.**
+**Phase 10 implements Long-Term Trend Analytics, Performance Metrics, and Professional Reporting.**
 
 Veritas now:
-- Detects logical drift over time (increasing issues, inconsistencies)
-- Tracks bias trends (emotional language, loaded framing accumulation)
-- Detects anomalies (sudden deviations from normal patterns)
-- Stores monitoring snapshots for long-term analysis
-- Provides automated health status (stable/warning/critical)
+- Analyzes long-term bias trends over weeks/months
+- Computes logic issue trends with linear regression slopes
+- Tracks source reliability trends over time
+- Generates Veritas Performance Score (0-100) with subsystem grades
+- Produces governance-grade reports with chart-ready data
+- Provides actionable recommendations (advisory only)
 
 **Important:** Veritas monitors only — never intervenes or takes autonomous actions.
 All monitoring results are reported to Sky/Congress for their decision-making.
@@ -23,7 +24,7 @@ Veritas does NOT:
 - Actually escalate or forward events
 - Intervene based on monitoring results
 
-Previous phases include: dispute resolution, structured schema audits, Congress review tools, legislative functions, Event API, and RAG memory.
+Previous phases include: automated monitoring, drift detection, bias trends, dispute resolution, structured schema audits, Congress review tools, legislative functions, Event API, and RAG memory.
 
 All analysis is rule-based with no ML models. Results are deterministic and interpretable.
 Veritas adjudicates **logic, not policy**. It does not evaluate morality, cost, or political alignment.
@@ -693,6 +694,7 @@ The `/event/congress` endpoint provides structured event handling for Congress w
 | `statement_for_audit` | Audit a statement for truth/bias | `statement_id`, `text`, `sources` (optional) |
 | `dispute_for_analysis` | Analyze a dispute between agents | `agent_A`, `agent_B` |
 | `monitoring_cycle` | Run drift/bias/anomaly monitoring | `limit` (optional, default 10) |
+| `generate_veritas_report` | Generate comprehensive trend/performance report | `store` (optional, default true) |
 
 ### Bill Review Example
 
@@ -975,6 +977,201 @@ result = registry.invoke("run_monitoring", {"limit": 10})
 print(result["overall_status"])  # "stable", "warning", or "critical"
 ```
 
+## Long-Term Trend Analytics & Reporting (Phase 10)
+
+The trend analytics and reporting system provides governance-grade reports for long-term pattern analysis.
+
+**Important:** Veritas monitors only — never intervenes or takes autonomous actions.
+All reports are informational and do not constitute decisions or recommendations for action.
+
+### Trend Engine
+
+The trend engine analyzes all historical audits to compute long-term trends:
+
+- **Bias Trends**: Weekly buckets with linear regression slopes for each bias type
+- **Logic Issue Trends**: Count issue types per week with trend analysis
+- **Source Reliability Trends**: Track support/contradiction/missing context rates
+
+```python
+from app.trend_engine import (
+    load_all_audits,
+    compute_bias_over_time,
+    compute_logic_issue_trends,
+    compute_source_reliability_trends,
+    compute_performance_score,
+)
+
+# Load all historical audits
+audits = load_all_audits()
+
+# Compute trends
+bias_trends = compute_bias_over_time(audits)
+logic_trends = compute_logic_issue_trends(audits)
+source_trends = compute_source_reliability_trends(audits)
+
+# Compute performance score
+trends = {
+    "bias_trends": bias_trends,
+    "logic_trends": logic_trends,
+    "source_trends": source_trends,
+}
+performance = compute_performance_score(trends)
+print(f"Score: {performance['score']}/100")  # e.g., "Score: 85.0/100"
+```
+
+### Veritas Performance Score
+
+The performance score (0-100) provides a single metric for Veritas health:
+
+**Penalty System:**
+
+| Condition | Penalty |
+|-----------|---------|
+| Strong upward bias trend (slope > 0.1) | -15 |
+| Moderate upward bias trend (slope 0.05-0.1) | -7 |
+| Strong contradiction trend (slope > 0.1) | -20 |
+| Moderate contradiction trend (slope 0.05-0.1) | -10 |
+| Fallacy trend increase (slope > 0.1) | -10 |
+| Declining source support (slope < -0.05) | -10 |
+| Increasing source contradictions (slope > 0.05) | -5 |
+| Critical monitoring status | -25 |
+| Warning monitoring status | -10 |
+
+**Grade System:**
+
+| Grade | Score Range |
+|-------|-------------|
+| A | ≥ 80 |
+| B | ≥ 60 |
+| C | ≥ 40 |
+| D | < 40 |
+
+**Subsystem Grades:**
+- `bias_analysis`: Grade based on bias trend penalties
+- `logic_analysis`: Grade based on logic issue penalties
+- `source_validation`: Grade based on source reliability penalties
+- `monitoring_stability`: Grade based on monitoring status
+
+### Report Generation
+
+Generate comprehensive reports via the Congress endpoint:
+
+**Request:**
+```bash
+curl -X POST http://localhost:8000/event/congress \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "generate_veritas_report",
+    "payload": {}
+  }'
+```
+
+**Response:**
+```json
+{
+  "ok": true,
+  "event_type": "generate_veritas_report",
+  "result": {
+    "meta": {
+      "agent": "veritas",
+      "version": "0.10.0",
+      "phase": 10,
+      "generated_at": "2024-01-15T10:30:00.000000+00:00",
+      "audits_analyzed": 50
+    },
+    "trends": {
+      "bias_trends": {"slopes": {...}, "top_increasing": [...], ...},
+      "logic_trends": {"slopes": {...}, "notable_trends": [...], ...},
+      "source_trends": {"slopes": {...}, "summary": "...", ...}
+    },
+    "monitoring": {
+      "overall_status": "stable",
+      ...
+    },
+    "performance": {
+      "score": 85.0,
+      "grades": {
+        "bias_analysis": "A",
+        "logic_analysis": "B",
+        "source_validation": "A",
+        "monitoring_stability": "A"
+      },
+      "stability_index": 1.0,
+      "summary": "...",
+      "penalties": [...]
+    },
+    "chart_data": {
+      "bias_over_time": {...},
+      "logic_issues_over_time": {...},
+      "source_rates": {...}
+    },
+    "summary": "Veritas health is excellent (score: 85/100)...",
+    "recommendations": [
+      "STATUS: All systems operating within normal parameters.",
+      "NOTE: All recommendations are advisory only."
+    ],
+    "storage": {"stored": true, "file_path": "...", "report_id": "..."}
+  }
+}
+```
+
+### Chart-Ready Data
+
+The `chart_data` section provides arrays suitable for visualization:
+
+```json
+{
+  "bias_over_time": {
+    "emotional_language": {
+      "weeks": ["2024-W01", "2024-W02", "2024-W03"],
+      "counts": [5, 7, 6],
+      "slope": 0.05
+    }
+  },
+  "logic_issues_over_time": {
+    "contradiction": {
+      "weeks": ["2024-W01", "2024-W02"],
+      "counts": [2, 3],
+      "slope": 0.1
+    }
+  },
+  "source_rates": {
+    "support": {"weeks": [...], "rates": [...], "slope": 0.02},
+    "contradiction": {"weeks": [...], "rates": [...], "slope": -0.01}
+  }
+}
+```
+
+### Recommendations
+
+Reports include advisory recommendations based on analysis:
+
+| Type | Example |
+|------|---------|
+| ADVISORY | Review bias detection patterns. Increasing bias trends detected. |
+| TREND | Contradiction rate increasing rapidly. May indicate systemic issues. |
+| URGENT | Multiple monitoring concerns detected. Manual review recommended. |
+| STATUS | All systems operating within normal parameters. |
+| NOTE | All recommendations are advisory only. Veritas does not take autonomous action. |
+
+### Report Storage
+
+Reports are stored in `app/memory/long_term/monitoring/reports/`:
+- JSON files named by timestamp (report_YYYY-MM-DD_HH-MM-SS.json)
+- Can be retrieved using `get_recent_reports(limit=10)`
+- Enables historical trend analysis
+
+### Tool Registry
+
+```python
+from app.tools import registry
+
+# Generate comprehensive report
+result = registry.invoke("generate_report", {"store": True})
+print(f"Score: {result['performance']['score']}")
+print(f"Summary: {result['summary']}")
+```
+
 ## API Endpoints
 
 | Endpoint | Method | Description |
@@ -1034,11 +1231,13 @@ veritas/
 ├── app/
 │   ├── main.py              # FastAPI entry point
 │   ├── config.py            # Configuration
-│   ├── schemas.py           # Pydantic models for structured output (Phase 7)
+│   ├── schemas.py           # Pydantic models for structured output (Phase 7/10)
 │   ├── dispute_engine.py    # Dispute parsing and classification (Phase 8)
 │   ├── monitoring_engine.py # Drift detection and monitoring (Phase 9)
+│   ├── trend_engine.py      # Long-term trend analytics (Phase 10)
+│   ├── reporting.py         # Governance-grade reporting (Phase 10)
 │   ├── memory_utils.py      # Memory storage utilities (Phase 8/9)
-│   ├── routes/veritas.py    # API endpoints (Phase 9: Monitoring)
+│   ├── routes/veritas.py    # API endpoints (Phase 10: Reporting)
 │   ├── logic/
 │   │   ├── brain.py         # VeritasBrain + handle_event + convenience functions
 │   │   ├── legislative.py   # Legislative functions (Phase 6)
@@ -1050,12 +1249,13 @@ veritas/
 │   │   ├── ingest.py        # Document ingestion (Phase 4)
 │   │   └── query.py         # Embedding & similarity search (Phase 4)
 │   ├── tools/
-│   │   └── __init__.py      # Tool registry + Monitoring tools (Phase 9)
+│   │   └── __init__.py      # Tool registry + Reporting tools (Phase 10)
 │   ├── memory/
 │   │   └── long_term/
 │   │       ├── disputes/    # Dispute analysis storage (Phase 8)
 │   │       ├── audits/      # Audit storage (Phase 9)
-│   │       └── monitoring/  # Monitoring snapshots (Phase 9)
+│   │       └── monitoring/
+│   │           └── reports/ # Generated reports (Phase 10)
 │   └── logs/
 │       ├── veritas_brain.log        # Brain operations
 │       ├── veritas_contributions.log # Analysis audit trail
@@ -1063,7 +1263,9 @@ veritas/
 │       ├── veritas_legislative_contributions.log # Legislative audit trail
 │       ├── rag_query.log            # RAG query logs
 │       ├── memory_utils.log         # Memory operations
-│       └── monitoring_engine.log    # Monitoring operations (Phase 9)
+│       ├── monitoring_engine.log    # Monitoring operations (Phase 9)
+│       ├── trend_engine.log         # Trend analysis operations (Phase 10)
+│       └── reporting.log            # Report generation operations (Phase 10)
 ├── memory/
 │   └── long/
 │       └── veritas_corpus.jsonl  # Document corpus storage
@@ -1080,6 +1282,10 @@ veritas/
 │   ├── test_monitoring_engine.py # Monitoring engine tests (Phase 9)
 │   ├── test_monitoring_tool.py   # Monitoring tool tests (Phase 9)
 │   ├── test_monitoring_event.py  # Monitoring event tests (Phase 9)
+│   ├── test_trend_engine.py      # Trend engine tests (Phase 10)
+│   ├── test_performance_score.py # Performance score tests (Phase 10)
+│   ├── test_generate_report.py   # Report generation tests (Phase 10)
+│   ├── test_generate_report_event.py # Report event tests (Phase 10)
 │   ├── test_endpoints.py    # API endpoint tests
 │   ├── test_auditor.py      # Logic auditor tests
 │   ├── test_bias.py         # Bias detector tests
@@ -1194,14 +1400,37 @@ Veritas is:
 
 **Important:** Veritas monitors only — never intervenes or takes autonomous actions.
 
-### Phase 10 (Planned)
+### Phase 10 (Complete)
+
+- Long-Term Trend Analytics, Performance Metrics, and Professional Reporting
+  - `load_all_audits()`: Load all historical audits from storage
+  - `compute_bias_over_time()`: Weekly bias trends with linear regression slopes
+  - `compute_logic_issue_trends()`: Weekly logic issue trends with slope analysis
+  - `compute_source_reliability_trends()`: Track source support/contradiction rates
+  - `compute_performance_score()`: Generate 0-100 performance score with grades
+  - `TrendEngine` class for OOP interface
+- Unified Reporting Engine
+  - `generate_full_veritas_report()`: Comprehensive governance-grade reports
+  - `store_report()`: Store reports to long-term storage
+  - `get_recent_reports()`: Retrieve historical reports
+  - `ReportingEngine` class for OOP interface
+- Chart-ready data structures for visualization
+- `VeritasReport` Pydantic schema
+- `generate_veritas_report` event type for Congress
+- `tool_generate_report()` in tool registry
+- Report storage in `app/memory/long_term/monitoring/reports/`
+
+**Important:** Veritas monitors only — never intervenes or takes autonomous actions.
+All reports are informational and do not constitute decisions or recommendations for action.
+
+### Phase 11 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 11 (Planned)
+### Phase 12 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -1210,4 +1439,4 @@ Veritas is:
 
 ## Disclaimer
 
-Phase 9 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events. **Monitoring results are informational** - Veritas monitors only and never intervenes or takes autonomous actions.
+Phase 10 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events. **Monitoring results and reports are informational** - Veritas monitors only and never intervenes or takes autonomous actions. **Performance scores and recommendations are advisory** - they provide insights for decision-making but do not trigger any autonomous action.

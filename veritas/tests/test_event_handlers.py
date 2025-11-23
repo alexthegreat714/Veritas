@@ -228,8 +228,8 @@ class TestStatusEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["phase"] == 9
-        assert data["version"] == "0.9.0"
+        assert data["phase"] == 10
+        assert data["version"] == "0.10.0"
 
     def test_status_shows_congress_integration(self):
         """Test that status shows Congress integration active."""

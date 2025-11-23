@@ -293,15 +293,15 @@ class TestStatusEndpointPhase9:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["phase"] == 9
+        assert data["phase"] == 10
 
     def test_status_version_0_9_0(self):
-        """Test status shows version 0.9.0."""
+        """Test status shows version 0.10.0."""
         response = client.get("/status")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["version"] == "0.9.0"
+        assert data["version"] == "0.10.0"
 
     def test_status_monitoring_engine_active(self):
         """Test status shows monitoring_engine active."""
