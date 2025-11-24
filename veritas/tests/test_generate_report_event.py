@@ -139,8 +139,8 @@ class TestGenerateReportEventEndpoint:
         meta = data["result"]["meta"]
 
         assert meta["agent"] == "veritas"
-        assert meta["version"] == "0.10.0"
-        assert meta["phase"] == 10
+        assert meta["version"] == "0.11.0"
+        assert meta["phase"] == 11
 
     def test_endpoint_returns_chart_data(self):
         """Test that endpoint returns chart-ready data."""
@@ -324,14 +324,14 @@ class TestStatusEndpointPhase10:
         response = client.get("/status")
         data = response.json()
 
-        assert data["version"] == "0.10.0"
+        assert data["version"] == "0.11.0"
 
     def test_status_phase(self):
         """Test status endpoint returns phase 10."""
         response = client.get("/status")
         data = response.json()
 
-        assert data["phase"] == 10
+        assert data["phase"] == 11
 
     def test_status_components_include_new_engines(self):
         """Test status includes trend_engine and reporting_engine."""

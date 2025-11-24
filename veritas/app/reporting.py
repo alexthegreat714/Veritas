@@ -129,8 +129,8 @@ def generate_full_veritas_report() -> Dict[str, Any]:
     report = {
         "meta": {
             "agent": "veritas",
-            "version": "0.10.0",
-            "phase": 10,
+            "version": "0.11.0",
+            "phase": 11,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "audits_analyzed": len(audits),
         },

@@ -5,6 +5,7 @@ This module defines the API endpoints for the Veritas truth auditing service.
 All endpoints return JSON responses.
 
 Phase 6: Legislative functions for Congress interaction.
+Phase 8: Production hardening with rate limits and payload validation.
 Integrated with VeritasBrain reasoning engine, RAG memory, and Event API.
 """
 
@@ -16,6 +17,15 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from app.logic.auditor import audit_text
+from app.config import VERITAS_FEATURE_FLAGS, is_feature_enabled
+from app.utils import enforce_payload_size, enforce_rate_limit, reset_rate_state
+from app.error_handler import (
+    InvalidPayloadError,
+    RateLimitError,
+    PayloadSizeError,
+    FeatureDisabledError,
+    VeritasError,
+)
 from app.logic.bias_detector import detect_bias
 from app.logic.chain_validator import validate_chain
 from app.logic.source_checker import check_sources
@@ -158,6 +168,8 @@ async def run_task(request: TaskRequest) -> Dict[str, Any]:
     The brain automatically classifies tasks and runs appropriate tools.
     For explicit task_type requests, the payload is enriched accordingly.
 
+    Phase 8: Added rate limiting and payload size enforcement.
+
     Supported task types:
     - audit_text: Analyze text for logical issues and bias
     - validate_chain: Validate reasoning chain
@@ -169,6 +181,12 @@ async def run_task(request: TaskRequest) -> Dict[str, Any]:
     logger.info(f"Running task: {request.task_type}")
 
     try:
+        # Phase 8: Enforce rate limit
+        enforce_rate_limit("tools")
+
+        # Phase 8: Enforce payload size
+        enforce_payload_size(request.payload)
+
         # Build payload for brain processing
         payload = dict(request.payload)
 
@@ -192,6 +210,9 @@ async def run_task(request: TaskRequest) -> Dict[str, Any]:
             "summary": result["summary"],
             "details": result["details"],
         }
+    except (RateLimitError, PayloadSizeError) as e:
+        logger.warning(f"Task blocked: {e.code} - {e.message}")
+        raise
     except Exception as e:
         logger.error(f"Task execution error: {e}")
         return {
@@ -206,6 +227,8 @@ async def get_status() -> Dict[str, Any]:
     """
     Get the current status of the Veritas service.
 
+    Phase 8: Expanded to include feature flags and rate limits.
+
     Returns operational status of all components including:
     - VeritasBrain reasoning engine
     - Logic auditor
@@ -213,29 +236,43 @@ async def get_status() -> Dict[str, Any]:
     - Chain validator
     - Source checker
     - RAG system
+    - Feature flags
+    - Rate limits
     """
     return {
         "ok": True,
+        "agent": "veritas",
         "status": "operational",
-        "version": "0.10.0",
-        "phase": 10,
+        "version": "0.11.0",
+        "phase": 11,
         "components": {
             "brain": "active",
             "auditor": "active",
             "bias_detector": "active",
             "chain_validator": "active",
             "source_checker": "active",
-            "rag": "active",
+            "rag": "active" if is_feature_enabled("rag") else "disabled",
             "event_api": "active",
             "legislative": "active",
             "congress_integration": "active",
             "structured_output": "active",
             "dispute_engine": "active",
-            "monitoring_engine": "active",
+            "monitoring_engine": "active" if is_feature_enabled("monitoring") else "disabled",
             "trend_engine": "active",
-            "reporting_engine": "active",
+            "reporting_engine": "active" if is_feature_enabled("reporting") else "disabled",
+            "error_handler": "active",
         },
         "tools": tool_registry.list_tools(),
+        "feature_flags": {
+            "rag_enabled": is_feature_enabled("rag"),
+            "monitoring_enabled": is_feature_enabled("monitoring"),
+            "reporting_enabled": is_feature_enabled("reporting"),
+            "strict_mode": VERITAS_FEATURE_FLAGS.get("strict_mode", False),
+        },
+        "rate_limits": VERITAS_FEATURE_FLAGS.get("rate_limits", {}),
+        "monitoring_enabled": is_feature_enabled("monitoring"),
+        "reporting_enabled": is_feature_enabled("reporting"),
+        "rag_enabled": is_feature_enabled("rag"),
     }
 
 
@@ -337,7 +374,9 @@ class CongressEventRequest(BaseModel):
 @router.post("/event/congress", response_class=JSONResponse)
 async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]:
     """
-    Handle structured events from Congress (Phase 5/6/7).
+    Handle structured events from Congress (Phase 5/6/7/8).
+
+    Phase 8: Added rate limiting and payload size enforcement.
 
     Supported event_type values:
     - "bill_for_review": Review a bill for logical consistency
@@ -364,6 +403,17 @@ async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]
     """
     logger.info(f"Congress event received: {request.event_type}")
 
+    try:
+        # Phase 8: Enforce rate limit
+        enforce_rate_limit("events")
+
+        # Phase 8: Enforce payload size
+        enforce_payload_size(request.payload)
+
+    except (RateLimitError, PayloadSizeError) as e:
+        logger.warning(f"Congress event blocked: {e.code} - {e.message}")
+        raise
+
     # Validate event type
     if request.event_type not in CONGRESS_EVENT_TYPES:
         return JSONResponse(
@@ -385,6 +435,9 @@ async def handle_congress_event(request: CongressEventRequest) -> Dict[str, Any]
             "event_type": request.event_type,
             "result": result,
         }
+    except (FeatureDisabledError, VeritasError) as e:
+        logger.warning(f"Congress event failed: {e.code} - {e.message}")
+        raise
     except Exception as e:
         logger.error(f"Congress event error: {e}")
         return JSONResponse(

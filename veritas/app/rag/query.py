@@ -5,6 +5,8 @@ This module handles semantic search and knowledge retrieval
 from the RAG system using deterministic embeddings.
 
 Phase 4: Local file-based querying with simple similarity search.
+Phase 8: Added RAG safety layer for production hardening.
+
 No external services, no network calls, no ML models.
 """
 
@@ -18,6 +20,7 @@ from typing import Any, Dict, List, Optional
 from logging.handlers import RotatingFileHandler
 
 from app.rag.ingest import load_corpus
+from app.config import is_feature_enabled
 
 
 # Configure module logger
@@ -146,12 +149,102 @@ def cosine_similarity(vec1: List[float], vec2: List[float]) -> float:
     return dot_product / (mag1 * mag2)
 
 
+# ============================================================================
+# RAG Safety Layer (Phase 8)
+# ============================================================================
+
+# Maximum query length for RAG
+MAX_RAG_QUERY_LENGTH = 2000
+
+# Maximum number of results to return
+MAX_RAG_RESULTS = 20
+
+# Patterns that indicate potentially unsafe queries
+RISKY_PATTERNS = [
+    # File path patterns
+    r'[/\\](?:etc|var|home|root|usr|tmp|windows|system32)',
+    r'\.\.[/\\]',
+    r'~[/\\]',
+    r'[A-Za-z]:[/\\]',
+    # Code execution patterns
+    r'\bexec\s*\(',
+    r'\beval\s*\(',
+    r'\bsystem\s*\(',
+    r'\bos\.(?:system|popen|exec)',
+    r'\bsubprocess\.',
+    r'`[^`]+`',
+    r'\$\([^)]+\)',
+    # SQL injection patterns
+    r'\b(?:SELECT|INSERT|UPDATE|DELETE|DROP|UNION)\b.*\b(?:FROM|INTO|WHERE|TABLE)\b',
+    # Script tags
+    r'<script[^>]*>',
+    r'javascript:',
+    # Shell commands
+    r'\b(?:rm|chmod|chown|sudo|wget|curl)\s+-',
+]
+
+COMPILED_RISKY_PATTERNS = [re.compile(p, re.IGNORECASE) for p in RISKY_PATTERNS]
+
+
+def risky_query_detected(query: str) -> bool:
+    """
+    Check if a query appears unsafe or malicious.
+
+    Detects:
+    - File paths
+    - Code execution patterns
+    - SQL injection attempts
+    - Script injection
+    - Shell commands
+
+    Args:
+        query: The query to check.
+
+    Returns:
+        True if risky patterns detected, False otherwise.
+    """
+    if not query:
+        return False
+
+    for pattern in COMPILED_RISKY_PATTERNS:
+        if pattern.search(query):
+            logger.warning(f"Risky query pattern detected: {pattern.pattern[:30]}...")
+            return True
+
+    return False
+
+
+def sanitize_rag_query(query: str) -> str:
+    """
+    Sanitize a RAG query by removing potentially dangerous content.
+
+    Args:
+        query: The query to sanitize.
+
+    Returns:
+        Sanitized query string.
+    """
+    # Remove HTML tags
+    query = re.sub(r'<[^>]+>', '', query)
+
+    # Remove null bytes
+    query = query.replace('\x00', '')
+
+    # Truncate to max length
+    if len(query) > MAX_RAG_QUERY_LENGTH:
+        query = query[:MAX_RAG_QUERY_LENGTH]
+
+    return query.strip()
+
+
 def query_relevant_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
     """
     Query the corpus for relevant documents.
 
     Embeds the query and all documents, computes similarity,
     and returns the top-k most relevant documents.
+
+    Phase 8: Added safety checks and feature flag support.
 
     Args:
         query: The query text.
@@ -161,6 +254,22 @@ def query_relevant_documents(query: str, top_k: int = 5) -> Dict[str, Any]:
         Dictionary containing:
         - hits: List of matching documents with scores
     """
+    # Check if RAG is enabled
+    if not is_feature_enabled("rag"):
+        logger.info("RAG is disabled, returning empty results")
+        return {"hits": [], "disabled": True}
+
+    # Sanitize query
+    query = sanitize_rag_query(query)
+
+    # Check for risky queries
+    if risky_query_detected(query):
+        logger.warning(f"Risky query rejected: '{query[:50]}...'")
+        return {"hits": [], "rejected": True, "reason": "Query appears unsafe"}
+
+    # Enforce result limit
+    top_k = min(top_k, MAX_RAG_RESULTS)
+
     logger.info(f"Querying corpus with: '{query[:50]}...' (top_k={top_k})")
 
     # Load corpus

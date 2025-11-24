@@ -10,6 +10,7 @@ Veritas is responsible for:
 - Source verification
 
 Phase 1: Scaffolding with stub implementations.
+Phase 8: Added global exception handlers for production hardening.
 """
 
 from fastapi import FastAPI
@@ -17,6 +18,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import config
 from app.routes.veritas import router as veritas_router
+from app.error_handler import register_exception_handlers
 
 
 app = FastAPI(
@@ -30,6 +32,9 @@ app = FastAPI(
 
 # Register the Veritas router
 app.include_router(veritas_router)
+
+# Phase 8: Register global exception handlers
+register_exception_handlers(app)
 
 
 @app.get("/", response_class=JSONResponse)

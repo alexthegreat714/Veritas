@@ -2,17 +2,23 @@
 
 Veritas is the AI Senate member responsible for truth auditing, logic checking, bias detection, and chain-of-thought validation. It serves as the analytical backbone for verifying claims, detecting logical fallacies, and ensuring the integrity of reasoning processes.
 
-## Current Status: Phase 10
+## Current Status: Phase 11
 
-**Phase 10 implements Long-Term Trend Analytics, Performance Metrics, and Professional Reporting.**
+**Phase 11 implements Production Hardening with error boundaries, rate limiting, and security controls.**
 
 Veritas now:
-- Analyzes long-term bias trends over weeks/months
-- Computes logic issue trends with linear regression slopes
-- Tracks source reliability trends over time
-- Generates Veritas Performance Score (0-100) with subsystem grades
-- Produces governance-grade reports with chart-ready data
-- Provides actionable recommendations (advisory only)
+- Provides centralized error handling with structured JSON responses
+- Enforces rate limiting (20 events/min, 30 tools/min)
+- Validates payload sizes (max 64KB)
+- Implements feature flags for RAG, monitoring, and reporting
+- Includes RAG safety layer to reject malicious queries
+- Hardened tools and endpoints for production stability
+
+Previous Phase 10 added:
+- Long-term bias trends over weeks/months with regression slopes
+- Logic issue trends with slope analysis
+- Veritas Performance Score (0-100) with subsystem grades
+- Governance-grade reports with chart-ready data
 
 **Important:** Veritas monitors only — never intervenes or takes autonomous actions.
 All monitoring results are reported to Sky/Congress for their decision-making.
@@ -1423,14 +1429,38 @@ Veritas is:
 **Important:** Veritas monitors only — never intervenes or takes autonomous actions.
 All reports are informational and do not constitute decisions or recommendations for action.
 
-### Phase 11 (Planned)
+### Phase 11 (Complete)
+
+- Production Hardening, Error Boundaries, Rate Limits, Config Enforcement
+  - `app/error_handler.py`: Centralized exception handling
+    - `VeritasError`, `InvalidPayloadError`, `ToolExecutionError`, `MemoryAccessError`
+    - `RAGSafetyError`, `RateLimitError`, `PayloadSizeError`, `FeatureDisabledError`
+    - Structured JSON error responses (no stack traces exposed)
+  - `app/config.py`: Feature flags and rate limits
+    - `VERITAS_FEATURE_FLAGS`: Enable/disable RAG, monitoring, reporting
+    - Rate limits: 20 events/min, 30 tools/min
+    - Max payload size: 64KB
+  - `app/utils.py`: Payload validation and rate limiting
+    - `enforce_payload_size()`: Reject oversized payloads
+    - `enforce_rate_limit()`: Rolling window rate limiting
+    - Input validation utilities
+  - RAG safety layer in `rag/query.py`
+    - Reject queries with file paths, code execution patterns
+    - Sanitize and truncate queries
+  - Hardened tools with feature flag checks
+  - Hardened endpoints with rate limiting
+  - Expanded `/status` endpoint with feature flags and rate limits
+
+**Important:** Phase 11 is optional production hardening. It adds no new intelligence or decision-making.
+
+### Phase 12 (Planned)
 
 - External API integration (optional)
 - Real-time source verification
 - Content fetching and analysis
 - Fact-checking capabilities
 
-### Phase 12 (Planned)
+### Phase 13 (Planned)
 
 - Enhanced pattern libraries
 - Confidence calibration
@@ -1439,4 +1469,4 @@ All reports are informational and do not constitute decisions or recommendations
 
 ## Disclaimer
 
-Phase 10 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events. **Monitoring results and reports are informational** - Veritas monitors only and never intervenes or takes autonomous actions. **Performance scores and recommendations are advisory** - they provide insights for decision-making but do not trigger any autonomous action.
+Phase 11 analysis is heuristic-based and deterministic. Results should be interpreted as indicators, not definitive assessments. The tool does not make external requests or fetch content - it analyzes text structure and patterns only. The RAG system uses simple embeddings and should not be considered production-grade semantic search. **Veritas votes on logic integrity, not policy merit** - moral, economic, and political considerations are outside its scope. **Congress review recommendations are advisory only** - they do not constitute a vote, law change, or override of any other agent. **Dispute escalation targets are advisory** - Veritas does not actually escalate or forward events. **Monitoring results and reports are informational** - Veritas monitors only and never intervenes or takes autonomous actions. **Performance scores and recommendations are advisory** - they provide insights for decision-making but do not trigger any autonomous action. **Rate limits and error responses are for stability** - they do not affect the accuracy of analysis.

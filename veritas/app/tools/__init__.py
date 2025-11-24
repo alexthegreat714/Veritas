@@ -8,12 +8,15 @@ system to perform specific tasks.
 Phase 5: Dispute resolution tools added.
 Phase 6: Monitoring tools added.
 Phase 7: Reporting tools added.
+Phase 8: Production hardening with error handling and feature flags.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from app.logic.auditor import audit_text
+from app.config import is_feature_enabled
+from app.error_handler import ToolExecutionError, FeatureDisabledError
 from app.logic.bias_detector import detect_bias
 from app.logic.source_checker import check_sources
 from app.rag.query import query_relevant_documents
@@ -514,6 +517,8 @@ def tool_run_monitoring(payload: Dict[str, Any]) -> Dict[str, Any]:
     NOTE: Veritas monitors only — never intervenes or takes autonomous actions.
     Monitoring results are informational and returned to the caller for review.
 
+    Phase 8: Added feature flag check and error handling.
+
     Expects optional payload:
     {
         "limit": int  # Number of recent audits to analyze (default: 10)
@@ -531,29 +536,52 @@ def tool_run_monitoring(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     Steps:
-    1. Load recent audits from memory.
-    2. Run monitoring engine (drift, bias, anomaly detection).
-    3. Store snapshot in monitoring folder.
-    4. Return snapshot.
+    1. Check feature flag.
+    2. Load recent audits from memory.
+    3. Run monitoring engine (drift, bias, anomaly detection).
+    4. Store snapshot in monitoring folder.
+    5. Return snapshot.
     """
     logger.info("tool_run_monitoring invoked")
 
-    limit = payload.get("limit", 10)
+    # Step 1: Check feature flag (Phase 8)
+    if not is_feature_enabled("monitoring"):
+        raise FeatureDisabledError(
+            "Monitoring is disabled via configuration",
+            feature="monitoring"
+        )
 
-    # Step 1: Load recent audits
-    recent_audits = get_recent_audits(limit=limit)
-    logger.info(f"Loaded {len(recent_audits)} recent audits")
+    try:
+        limit = payload.get("limit", 10)
 
-    # Step 2: Run monitoring cycle
-    snapshot = run_monitoring_cycle(recent_audits)
+        # Validate limit (Phase 8)
+        if not isinstance(limit, int) or limit < 1:
+            limit = 10
+        limit = min(limit, 100)  # Cap at 100
 
-    # Step 3: Store snapshot
-    storage_result = store_monitoring_snapshot(snapshot)
-    snapshot["storage"] = storage_result
+        # Step 2: Load recent audits
+        recent_audits = get_recent_audits(limit=limit)
+        logger.info(f"Loaded {len(recent_audits)} recent audits")
 
-    logger.info(f"Monitoring cycle complete: status={snapshot.get('overall_status')}")
+        # Step 3: Run monitoring cycle
+        snapshot = run_monitoring_cycle(recent_audits)
 
-    return snapshot
+        # Step 4: Store snapshot
+        storage_result = store_monitoring_snapshot(snapshot)
+        snapshot["storage"] = storage_result
+
+        logger.info(f"Monitoring cycle complete: status={snapshot.get('overall_status')}")
+
+        return snapshot
+
+    except FeatureDisabledError:
+        raise
+    except Exception as e:
+        logger.error(f"tool_run_monitoring failed: {e}")
+        raise ToolExecutionError(
+            f"Monitoring cycle failed: {str(e)}",
+            tool_name="run_monitoring"
+        )
 
 
 # ============================================================================
@@ -569,6 +597,8 @@ def tool_generate_report(payload: Dict[str, Any]) -> Dict[str, Any]:
 
     NOTE: Veritas monitors only — never intervenes or takes autonomous actions.
     Reports are informational and returned to the caller for review.
+
+    Phase 8: Added feature flag check and error handling.
 
     Expects optional payload:
     {
@@ -588,30 +618,52 @@ def tool_generate_report(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     Steps:
-    1. Load all audits from long-term storage.
-    2. Compute long-term trends (bias, logic, source).
-    3. Load recent monitoring snapshot.
-    4. Compute performance score.
-    5. Store report if requested.
-    6. Return full report.
+    1. Check feature flag.
+    2. Load all audits from long-term storage.
+    3. Compute long-term trends (bias, logic, source).
+    4. Load recent monitoring snapshot.
+    5. Compute performance score.
+    6. Store report if requested.
+    7. Return full report.
     """
     logger.info("tool_generate_report invoked")
 
-    should_store = payload.get("store", True)
+    # Step 1: Check feature flag (Phase 8)
+    if not is_feature_enabled("reporting"):
+        raise FeatureDisabledError(
+            "Reporting is disabled via configuration",
+            feature="reporting"
+        )
 
-    # Generate full report
-    report = generate_full_veritas_report()
+    try:
+        should_store = payload.get("store", True)
 
-    # Store if requested
-    if should_store:
-        storage_result = store_report(report)
-        report["storage"] = storage_result
-    else:
-        report["storage"] = {"stored": False, "reason": "storage disabled"}
+        # Validate should_store (Phase 8)
+        if not isinstance(should_store, bool):
+            should_store = True
 
-    logger.info(f"Report generated: score={report.get('performance', {}).get('score')}")
+        # Generate full report
+        report = generate_full_veritas_report()
 
-    return report
+        # Store if requested
+        if should_store:
+            storage_result = store_report(report)
+            report["storage"] = storage_result
+        else:
+            report["storage"] = {"stored": False, "reason": "storage disabled"}
+
+        logger.info(f"Report generated: score={report.get('performance', {}).get('score')}")
+
+        return report
+
+    except FeatureDisabledError:
+        raise
+    except Exception as e:
+        logger.error(f"tool_generate_report failed: {e}")
+        raise ToolExecutionError(
+            f"Report generation failed: {str(e)}",
+            tool_name="generate_report"
+        )
 
 
 # ============================================================================

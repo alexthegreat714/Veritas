@@ -50,8 +50,8 @@ class TestGenerateFullReport:
 
         meta = report["meta"]
         assert meta["agent"] == "veritas"
-        assert meta["version"] == "0.10.0"
-        assert meta["phase"] == 10
+        assert meta["version"] == "0.11.0"
+        assert meta["phase"] == 11
         assert "generated_at" in meta
         assert "audits_analyzed" in meta
 

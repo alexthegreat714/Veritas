@@ -330,8 +330,8 @@ class TestStatusEndpoint:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["phase"] == 10
-        assert data["version"] == "0.10.0"
+        assert data["phase"] == 11
+        assert data["version"] == "0.11.0"
 
     def test_status_shows_dispute_engine(self):
         """Test that status shows dispute_engine active."""
